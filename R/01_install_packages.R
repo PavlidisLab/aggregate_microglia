@@ -1,0 +1,1 @@
+devtools::install_github("PavlidisLab/aggtools")
