@@ -10,9 +10,6 @@ sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 # List of cell types
 celltype_l <- readRDS(celltype_list_path)
 
-# Saving microglia metadata
-out_path <- "/space/scratch/amorin/aggregate_microglia/microglia_metadata.tsv"
-
 
 # Extract datasets and fuzzy cell type names corresponding to microglia
 # ------------------------------------------------------------------------------
@@ -60,4 +57,5 @@ mcg_df <- create_celltype_df(celltype_l, sc_meta, mcg_str)
 mcg_df$Path <- paste0(amat_dir, mcg_df$ID, "/",  mcg_df$ID, "_clean_mat_and_meta_CPM.RDS")
 
 
-write.table(mcg_df, sep = "\t", quote = FALSE, row.names = FALSE, file = out_path)
+write.table(mcg_df, sep = "\t", quote = FALSE, row.names = FALSE, 
+            file = mcg_meta_path)
