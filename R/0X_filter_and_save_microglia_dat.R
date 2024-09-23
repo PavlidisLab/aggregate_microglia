@@ -38,18 +38,67 @@ dat_l <- load_and_filter_dat(mcg_meta)
 saveRDS(dat_l, mcg_dat_path)
 
 
-dat <- aggtools::load_scdat(mcg_meta$Path[1])
-meta <- filter(dat$Meta, Cell_type %in% mcg_meta$Cell_type[1])
-mat <- dat$Mat[, meta$ID]
+
+# Get counts of measured genes per dataset. Pre filtering means any gene with
+# at least one count in any cell is considered. Post filtering uses the min
+# measurement filtering for calculating coexpression: gene must have at least
+# one count in at least 20 cells
+
+n_msr <- lapply(dat_l, function(x) {
+  
+  pre <- t(x$Mat)
+  post <- zero_sparse_cols(t(x$Mat))
+  
+  data.frame(
+    N_gene_prefilt = sum(colSums(pre) != 0),
+    N_gene_postfilt = sum(colSums(post) != 0)
+  )
+  
+})
 
 
-mat2 <- t(zero_sparse_cols(t(mat)))
 
-count_before <- rowSums(mat)
-count_after <- rowSums(mat2)
+# Combine with meta
 
-sum(count_before != 0)
-sum(count_after != 0)
+mcg_meta <- do.call(rbind, n_msr) %>% 
+  as.data.frame() %>% 
+  mutate(ID = names(dat_l)) %>% 
+  left_join(., mcg_meta, by = "ID") %>% 
+  relocate(c(N_gene_prefilt, N_gene_postfilt), .after = N_cells)
 
 
-plot(count_before, count_after)
+write.table(mcg_meta, sep = "\t", quote = FALSE, row.names = FALSE, 
+            file = mcg_meta_path)
+
+
+
+
+
+# Plotting
+
+
+p1 <- ggplot(mcg_meta, aes(x = log10(N_cells))) +
+    geom_histogram(bins = 20, colour = "slategrey", fill = "slategrey") +
+    ggtitle("Count of microglial cells") +
+    xlab("Log10 count") +
+    ylab("Frequency") +
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.title = element_text(size = 20),
+          plot.title = element_text(size = 20),
+          plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+p2 <- ggplot(mcg_meta, 
+             aes(x = N_gene_prefilt, y = N_gene_postfilt)) +
+  geom_point(shape = 21, size = 3.4, fill = "slategrey", colour = "white") +
+  ggtitle("Count of microglial genes") +
+  xlab("Pre-filter count") +
+  ylab("Post-filter count") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
