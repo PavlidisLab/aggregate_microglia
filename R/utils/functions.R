@@ -10,6 +10,70 @@ library(DescTools)
 
 
 
+# Misc/general
+
+
+
+# Not in
+
+'%!in%' <- function(x, y) !('%in%'(x, y))
+
+
+
+# Execute a function with provided args and save an RDS to path
+
+save_function_results <- function(path, 
+                                  fun,
+                                  args,
+                                  force_resave = FALSE) {
+  
+  if (!file.exists(path) || force_resave) {
+    
+    result <- do.call(fun, args)
+    
+    if (!is.null(result)) {
+      saveRDS(result, path)
+    }
+    
+    return(invisible(NULL))
+  }
+}
+
+
+
+# Convert a matrix into a long and skinny df. If symmetric, only return the
+# unique values.
+
+mat_to_df <- function(mat, symmetric = TRUE, value_name = NULL) {
+  
+  if (symmetric) {
+    df <- data.frame(
+      Row = rownames(mat)[row(mat)[lower.tri(mat)]],
+      Col = colnames(mat)[col(mat)[lower.tri(mat)]],
+      Value = mat[lower.tri(mat)],
+      stringsAsFactors = FALSE
+    )
+  } else {
+    df <- data.frame(
+      Row = rownames(mat)[row(mat)],
+      Col = colnames(mat)[col(mat)],
+      Value = c(mat),
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  if (!is.null(value_name)) colnames(df)[colnames(df) == "Value"] <- value_name
+  
+  return(df)
+}
+
+
+
+
+
+
+
+
 # Loading and saving data objects
 # ------------------------------------------------------------------------------
 
