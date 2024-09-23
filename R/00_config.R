@@ -1,4 +1,7 @@
 
+
+ncore <- 8
+
 ## TODO: These are paths from the TRsc paper, consider dependancy
 
 # TRsc metadata
@@ -20,3 +23,6 @@ mcg_meta_path <- "/space/scratch/amorin/aggregate_microglia/microglia_metadata.t
 
 # Microglia list of mat/meta
 mcg_dat_path <- "/space/scratch/amorin/aggregate_microglia/microglia_dat_list.RDS"
+
+# Cell correlations per dataset
+cell_cor_path <- "/space/scratch/amorin/aggregate_microglia/microglia_cell_cors.RDS"
