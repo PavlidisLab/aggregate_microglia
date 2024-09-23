@@ -74,6 +74,15 @@ write.table(mcg_meta, sep = "\t", quote = FALSE, row.names = FALSE,
 
 
 
+# Datasets that have multiple microglial annotations (each gets collapsed)
+dupl_ids <- unique(mcg_meta$ID[which(duplicated(mcg_meta$ID))])
+
+n_celltype <- count(mcg_meta, Cell_type) # this includes duplicates
+
+
+n_species <- mcg_meta %>% distinct(ID, .keep_all = TRUE) %>% count(Species)
+
+
 # Plotting
 
 
