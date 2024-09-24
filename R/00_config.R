@@ -26,3 +26,7 @@ mcg_dat_path <- "/space/scratch/amorin/aggregate_microglia/microglia_dat_list.RD
 
 # Cell correlations per dataset
 cell_cor_path <- "/space/scratch/amorin/aggregate_microglia/microglia_cell_cors.RDS"
+
+# Summary of gene counts across experiments
+count_summ_path <- "/space/scratch/amorin/aggregate_microglia/microglia_gene_count_summaries.RDS"
+  
