@@ -13,8 +13,8 @@ mcg_meta <- read.delim(mcg_meta_path)
 ids_hg <- unique(filter(mcg_meta, Species == "Human")$ID)
 ids_mm <- unique(filter(mcg_meta, Species == "Mouse")$ID)
 
-
 dat_l <- readRDS(mcg_dat_path)
+
 
 
 # TODO: summarization into a function
@@ -22,44 +22,112 @@ dat_l <- readRDS(mcg_dat_path)
 # TODO: is parallel helping or slowing
 
 
-avg_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) rowMeans(x$Mat), mc.cores = ncore))
-avg_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) rowMeans(x$Mat), mc.cores = ncore))
+calc_count_summaries <- function(dat_l, ids_hg, ids_mm) {
+  
+  
+  avg_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) rowMeans(x$Mat), mc.cores = ncore))
+  avg_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) rowMeans(x$Mat), mc.cores = ncore))
+  
+  med_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) apply(x$Mat, 1, median), mc.cores = ncore))
+  med_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) apply(x$Mat, 1, median), mc.cores = ncore))
+  
+  sd_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) apply(x$Mat, 1, sd), mc.cores = ncore))
+  sd_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) apply(x$Mat, 1, sd), mc.cores = ncore))
+  
+  cv_hg <- sd_hg / avg_hg
+  cv_mm <- sd_mm / avg_mm
+  
+  msr_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) rowSums(zero_sparse_cols(x$Mat)) != 0, mc.cores = ncore))
+  msr_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) rowSums(zero_sparse_cols(x$Mat)) != 0, mc.cores = ncore))
+  
+  
+  summ_hg <- data.frame(
+    Symbol = rownames(avg_hg),
+    Avg = rowMeans(avg_hg),
+    Med = rowMeans(med_hg),
+    SD = rowMeans(sd_hg),
+    CV = rowMeans(cv_hg),
+    N_msr = rowSums(msr_hg)
+  )
+  
+  
+  summ_mm <- data.frame(
+    Symbol = rownames(avg_mm),
+    Avg = rowMeans(avg_mm),
+    Med = rowMeans(med_mm),
+    SD = rowMeans(sd_mm),
+    CV = rowMeans(cv_mm),
+    N_msr = rowSums(msr_mm)
+  )
+  
+  list(Avg_hg = avg_hg,
+       Avg_mm = avg_mm,
+       Med_hg = med_hg,
+       Med_mm = med_mm,
+       SD_hg = sd_hg,
+       SD_mm = sd_mm,
+       CV_hg = cv_hg,
+       CV_mm = cv_mm,
+       Msr_hg = msr_hg,
+       Msr_mm = msr_mm,
+       Summ_hg = summ_hg,
+       Summ_mm = summ_mm)
+  
+  
+}
 
-med_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) apply(x$Mat, 1, median), mc.cores = ncore))
-med_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) apply(x$Mat, 1, median), mc.cores = ncore))
-
-sd_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) apply(x$Mat, 1, sd), mc.cores = ncore))
-sd_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) apply(x$Mat, 1, sd), mc.cores = ncore))
-
-cv_hg <- sd_hg / avg_hg
-cv_mm <- sd_mm / avg_mm
-
-msr_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) rowSums(zero_sparse_cols(x$Mat)) == 0, mc.cores = ncore))
-msr_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) rowSums(zero_sparse_cols(x$Mat)) == 0, mc.cores = ncore))
 
 
+# avg_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) rowMeans(x$Mat), mc.cores = ncore))
+# avg_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) rowMeans(x$Mat), mc.cores = ncore))
+# 
+# med_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) apply(x$Mat, 1, median), mc.cores = ncore))
+# med_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) apply(x$Mat, 1, median), mc.cores = ncore))
+# 
+# sd_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) apply(x$Mat, 1, sd), mc.cores = ncore))
+# sd_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) apply(x$Mat, 1, sd), mc.cores = ncore))
+# 
+# cv_hg <- sd_hg / avg_hg
+# cv_mm <- sd_mm / avg_mm
+# 
+# msr_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) rowSums(zero_sparse_cols(x$Mat)) != 0, mc.cores = ncore))
+# msr_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) rowSums(zero_sparse_cols(x$Mat)) != 0, mc.cores = ncore))
+# 
+# 
+# 
+# 
+# summ_hg <- data.frame(
+#   Symbol = rownames(avg_hg),
+#   Avg = rowMeans(avg_hg),
+#   Med = rowMeans(med_hg),
+#   SD = rowMeans(sd_hg),
+#   CV = rowMeans(cv_hg),
+#   N_msr = rowSums(msr_hg)
+# )
+# 
+# 
+# 
+# summ_mm <- data.frame(
+#   Symbol = rownames(avg_mm),
+#   Avg = rowMeans(avg_mm),
+#   Med = rowMeans(med_mm),
+#   SD = rowMeans(sd_mm),
+#   CV = rowMeans(cv_mm),
+#   N_msr = rowSums(msr_mm)
+# )
 
 
-summ_hg <- data.frame(
-  Symbol = rownames(avg_hg),
-  Avg = rowMeans(avg_hg),
-  Med = rowMeans(med_hg),
-  SD = rowMeans(sd_hg),
-  CV = rowMeans(cv_hg),
-  N_msr = rowSums(msr_hg)
-)
+
+if (!file.exists(count_summ_path)) {
+  count_summ <- calc_count_summaries(dat_l, ids_hg, ids_mm)
+  saveRDS(count_summ, count_summ_path)
+} else {
+  count_summ <- readRDS(count_summ_path)
+}
 
 
 
-summ_mm <- data.frame(
-  Symbol = rownames(avg_mm),
-  Avg = rowMeans(avg_mm),
-  Med = rowMeans(med_mm),
-  SD = rowMeans(sd_mm),
-  CV = rowMeans(cv_mm),
-  N_msr = rowSums(msr_mm)
-)
-
+stop()
 
 
 
