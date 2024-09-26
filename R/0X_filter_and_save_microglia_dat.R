@@ -6,6 +6,7 @@ library(aggtools)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
+
 mcg_meta <- read.delim(mcg_meta_path)
 
 
@@ -39,32 +40,41 @@ saveRDS(dat_l, mcg_dat_path)
 
 
 
-# Get counts of measured genes per dataset. Pre filtering means any gene with
-# at least one count in any cell is considered. Post filtering uses the min
-# measurement filtering for calculating coexpression: gene must have at least
-# one count in at least 20 cells
+# Additional count metadata of experiments
+# N_msr_prefilt: Genes that had at least one count in any cell.
+# N_msr_posfilt: Genes that had at least one count in 20+ cells (for coexpression)
+# Median_UMI: Median UMI (or UMI-like) counts
 
-n_msr <- lapply(dat_l, function(x) {
+meta_counts <- function(dat_l) {
   
-  pre <- t(x$Mat)
-  post <- zero_sparse_cols(t(x$Mat))
-  
-  data.frame(
-    N_gene_prefilt = sum(colSums(pre) != 0),
-    N_gene_postfilt = sum(colSums(post) != 0)
-  )
-  
-})
+  df_l <- lapply(dat_l, function(x) {
+    
+    pre <- t(x$Mat)
+    post <- zero_sparse_cols(t(x$Mat))
+    
+    data.frame(
+      N_msr_prefilt = sum(colSums(pre) != 0),
+      N_msr_postfilt = sum(colSums(post) != 0),
+      Median_UMI = median(x$Meta$UMI_counts)
+    )
+  })
+    
+  return(df_l)
+}
 
 
 
 # Combine with meta
 
-mcg_meta <- do.call(rbind, n_msr) %>% 
+
+count_l <- meta_counts(dat_l)
+
+
+mcg_meta <- do.call(rbind, count_l) %>% 
   as.data.frame() %>% 
   mutate(ID = names(dat_l)) %>% 
   left_join(., mcg_meta, by = "ID") %>% 
-  relocate(c(N_gene_prefilt, N_gene_postfilt), .after = N_cells)
+  relocate(c(N_msr_prefilt, N_msr_postfilt, Median_UMI), .after = N_cells)
 
 
 write.table(mcg_meta, sep = "\t", quote = FALSE, row.names = FALSE, 
@@ -86,25 +96,44 @@ n_species <- mcg_meta %>% distinct(ID, .keep_all = TRUE) %>% count(Species)
 # Plotting
 
 
-p1 <- ggplot(mcg_meta, aes(x = log10(N_cells))) +
-    geom_histogram(bins = 20, colour = "slategrey", fill = "slategrey") +
-    ggtitle("Count of microglial cells") +
-    xlab("Log10 count") +
-    ylab("Frequency") +
-    theme_classic() +
-    theme(axis.text = element_text(size = 20),
-          axis.title = element_text(size = 20),
-          plot.title = element_text(size = 20),
-          plot.margin = margin(c(10, 20, 10, 10)))
+p1 <- ggplot(mcg_meta, aes(x = log10(N_cells), fill = Species)) +
+  geom_histogram(bins = 20) +
+  ggtitle("Count of microglial cells") +
+  xlab("Log10 count") +
+  ylab("Frequency") +
+  scale_fill_manual(values = c("royalblue", "goldenrod")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
 
 
 
 p2 <- ggplot(mcg_meta, 
-             aes(x = N_gene_prefilt, y = N_gene_postfilt)) +
-  geom_point(shape = 21, size = 3.4, fill = "slategrey", colour = "white") +
-  ggtitle("Count of microglial genes") +
+             aes(x = N_msr_prefilt, y = N_msr_postfilt, fill = Species)) +
+  geom_point(shape = 21, size = 3.4, colour = "white") +
+  ggtitle("Count of measured microglial genes") +
   xlab("Pre-filter count") +
   ylab("Post-filter count") +
+  scale_fill_manual(values = c("royalblue", "goldenrod")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+
+p3 <- ggplot(mcg_meta, aes(x = log10(Median_UMI), fill = Species)) +
+  geom_histogram(bins = 20) +
+  ggtitle("Median UMI/UMI-like") +
+  xlab("Log10 count") +
+  ylab("Frequency") +
+  scale_fill_manual(values = c("royalblue", "goldenrod")) +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
         axis.title = element_text(size = 20),
