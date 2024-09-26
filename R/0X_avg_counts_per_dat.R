@@ -43,20 +43,20 @@ calc_count_summaries <- function(dat_l, ids_hg, ids_mm) {
   
   summ_hg <- data.frame(
     Symbol = rownames(avg_hg),
-    Avg = rowMeans(avg_hg),
-    Med = rowMeans(med_hg),
-    SD = rowMeans(sd_hg),
-    CV = rowMeans(cv_hg),
+    Avg = rowMeans(avg_hg, na.rm = TRUE),
+    Med = rowMeans(med_hg, na.rm = TRUE),
+    SD = rowMeans(sd_hg, na.rm = TRUE),
+    CV = rowMeans(cv_hg, na.rm = TRUE),
     N_msr = rowSums(msr_hg)
   )
   
   
   summ_mm <- data.frame(
     Symbol = rownames(avg_mm),
-    Avg = rowMeans(avg_mm),
-    Med = rowMeans(med_mm),
-    SD = rowMeans(sd_mm),
-    CV = rowMeans(cv_mm),
+    Avg = rowMeans(avg_mm, na.rm = TRUE),
+    Med = rowMeans(med_mm, na.rm = TRUE),
+    SD = rowMeans(sd_mm, na.rm = TRUE),
+    CV = rowMeans(cv_mm, na.rm = TRUE),
     N_msr = rowSums(msr_mm)
   )
   
@@ -78,46 +78,6 @@ calc_count_summaries <- function(dat_l, ids_hg, ids_mm) {
 
 
 
-# avg_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) rowMeans(x$Mat), mc.cores = ncore))
-# avg_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) rowMeans(x$Mat), mc.cores = ncore))
-# 
-# med_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) apply(x$Mat, 1, median), mc.cores = ncore))
-# med_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) apply(x$Mat, 1, median), mc.cores = ncore))
-# 
-# sd_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) apply(x$Mat, 1, sd), mc.cores = ncore))
-# sd_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) apply(x$Mat, 1, sd), mc.cores = ncore))
-# 
-# cv_hg <- sd_hg / avg_hg
-# cv_mm <- sd_mm / avg_mm
-# 
-# msr_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) rowSums(zero_sparse_cols(x$Mat)) != 0, mc.cores = ncore))
-# msr_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) rowSums(zero_sparse_cols(x$Mat)) != 0, mc.cores = ncore))
-# 
-# 
-# 
-# 
-# summ_hg <- data.frame(
-#   Symbol = rownames(avg_hg),
-#   Avg = rowMeans(avg_hg),
-#   Med = rowMeans(med_hg),
-#   SD = rowMeans(sd_hg),
-#   CV = rowMeans(cv_hg),
-#   N_msr = rowSums(msr_hg)
-# )
-# 
-# 
-# 
-# summ_mm <- data.frame(
-#   Symbol = rownames(avg_mm),
-#   Avg = rowMeans(avg_mm),
-#   Med = rowMeans(med_mm),
-#   SD = rowMeans(sd_mm),
-#   CV = rowMeans(cv_mm),
-#   N_msr = rowSums(msr_mm)
-# )
-
-
-
 if (!file.exists(count_summ_path)) {
   count_summ <- calc_count_summaries(dat_l, ids_hg, ids_mm)
   saveRDS(count_summ, count_summ_path)
@@ -126,24 +86,38 @@ if (!file.exists(count_summ_path)) {
 }
 
 
+rank_avg_hg <- aggtools::colrank_mat(count_summ$Avg_hg)
+rank_avg_mm <- aggtools::colrank_mat(count_summ$Avg_mm)
 
-stop()
+avg_log_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) rowMeans(log2(x$Mat+1)), mc.cores = ncore))
+avg_log_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) rowMeans(log2(x$Mat+1)), mc.cores = ncore))
+
+
+count_summ$Summ_hg <- cbind(
+  count_summ$Summ_hg,
+  Avg_log_avg = rowMeans(avg_log_hg),
+  Avg_rank_avg = rowMeans(rank_avg_hg),
+  RP_avg = rank((rowSums(log(rank_avg_hg)) / nrow(rank_avg_hg)))
+)
+
+
+count_summ$Summ_mm <- cbind(
+  count_summ$Summ_mm,
+  Avg_log_avg = rowMeans(avg_log_mm),
+  Avg_rank_avg = rowMeans(rank_avg_mm),
+  RP_avg = rank((rowSums(log(rank_avg_mm)) / nrow(rank_avg_mm)))
+)
 
 
 
-all0_hg <- filter(Symbol)
 
-
+# Experiment similarity/clustering
+# ------------------------------------------------------------------------------
 
 
 
 # TODO: compare cor using SD/CV, and cor after remove low genes
-
 dat_cor_hg <- cor(avg_hg, method = "spearman")
-
-
-
-
 dat_cor_mm <- cor(avg_mm, method = "spearman")
 
 
@@ -164,6 +138,143 @@ cor_heatmap <- function(mat) {
 
 cor_heatmap(dat_cor_hg)
 cor_heatmap(dat_cor_mm)
+
+
+
+
+
+# Trying to figure out genes with acceptable enough expression to keep
+# ------------------------------------------------------------------------------
+
+plot(density(log10(count_summ$Summ_hg$Avg + 1)))
+hist(log10(count_summ$Summ_hg$Avg + 1), breaks = 1000)
+abline(v = 0.3, col = "red")
+
+# keep_hg <- filter(count_summ$Summ_hg, N_msr > 0 & Avg > 0 & Med > 0) %>% arrange(desc(Avg))
+# keep_hg <- filter(count_summ$Summ_hg, log10(Avg + 1) > 0.3) %>% arrange(desc(Avg))
+# keep_hg <- filter(count_summ$Summ_hg, N_msr > 0) %>% arrange(desc(N_msr))
+keep_hg <- filter(count_summ$Summ_hg, N_msr > 0 & Avg > 0) %>% arrange(desc(Avg))
+
+
+plot(density(log10(keep_hg$Avg + 1)))
+hist(log10(keep_hg$Avg + 1), breaks = 1000)
+
+
+
+
+plot(density(log10(count_summ$Summ_mm$Avg + 1)))
+hist(log10(count_summ$Summ_mm$Avg + 1), breaks = 1000)
+abline(v = 0.3, col = "red")
+
+# keep_mm <- filter(count_summ$Summ_mm, N_msr > 0 & Avg > 0 & Med > 0) %>% arrange(desc(Avg))
+# keep_mm <- filter(count_summ$Summ_mm, log10(Avg + 1) > 0.3) %>% arrange(desc(Avg))
+# keep_mm <- filter(count_summ$Summ_mm, N_msr > 0) %>% arrange(desc(N_msr))
+keep_mm <- filter(count_summ$Summ_mm, N_msr > 0 & Avg > 0) %>% arrange(desc(Avg))
+
+
+plot(density(log10(keep_mm$Avg + 1)))
+hist(log10(keep_mm$Avg + 1), breaks = 1000)
+
+
+
+
+
+# Plotting average expression of counts
+# ------------------------------------------------------------------------------
+
+# head(count_summ$Summ_hg)
+
+plot_mat <- count_summ$Avg_hg[keep_hg$Symbol, ]
+plot_mat <- cbind(plot_mat, Average = count_summ$Summ_hg[keep_hg$Symbol, "Avg"])
+plot_mat <- scale(plot_mat)
+plot_mat[plot_mat > 3] <- 3
+
+pheatmap(plot_mat,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = RColorBrewer::brewer.pal(9, "Blues"),
+         show_rownames = FALSE,
+         # breaks = seq(0, 1, length.out = 10),
+         border_color = NA,
+         fontsize = 20,
+         gaps_col = ncol(plot_mat) - 1)
+
+
+
+plot_mat <- count_summ$Avg_mm[keep_mm$Symbol, ]
+plot_mat <- cbind(plot_mat, Average = count_summ$Summ_mm[keep_mm$Symbol, "Avg"])
+plot_mat <- scale(plot_mat)
+plot_mat[plot_mat > 3] <- 3
+
+pheatmap(plot_mat,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = RColorBrewer::brewer.pal(9, "Blues"),
+         show_rownames = FALSE,
+         # breaks = seq(0, 1, length.out = 10),
+         border_color = NA,
+         fontsize = 20,
+         gaps_col = ncol(plot_mat) - 1)
+
+
+
+
+
+# Plotting binary measurement for coexpression
+# ------------------------------------------------------------------------------
+
+
+plot_mat <- count_summ$Msr_hg[keep_hg$Symbol, ] * 1
+
+
+
+pheatmap(plot_mat,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = c("white", "black"),
+         show_rownames = FALSE,
+         # breaks = seq(0, 1, length.out = 10),
+         border_color = NA,
+         fontsize = 20)
+
+
+
+plot_mat <- count_summ$Msr_mm[keep_mm$Symbol, ] * 1
+
+
+pheatmap(plot_mat,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = c("white", "black"),
+         show_rownames = FALSE,
+         # breaks = seq(0, 1, length.out = 10),
+         border_color = NA,
+         fontsize = 20)
+
+
+
+# Plotting counts of a single experiments
+# ------------------------------------------------------------------------------
+
+
+plot_mat <- dat_l$GSE118020$Mat
+plot_mat <- cbind(plot_mat, Average = count_summ$Avg_mm[, "GSE118020"])
+
+
+pheatmap(plot_mat,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = RColorBrewer::brewer.pal(9, "Reds"),
+         show_rownames = FALSE,
+         show_colnames = FALSE,
+         # breaks = seq(0, 1, length.out = 10),
+         border_color = NA,
+         fontsize = 20,
+         gaps_col = ncol(plot_mat) - 1)
+
+
+
+
 
 
 
