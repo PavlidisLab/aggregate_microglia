@@ -170,8 +170,8 @@ cor_avg_mm <- cor(count_summ$Avg_mm[keep_mm$Symbol, ], method = "spearman")
 
 
 
-cor_cv_hg <- cor(count_summ$CV_hg, method = "spearman")
-cor_cv_mm <- cor(count_summ$CV_mm, method = "spearman")
+cor_cv_hg <- cor(count_summ$CV_hg, method = "spearman", use = "pairwise.complete.obs")
+cor_cv_mm <- cor(count_summ$CV_mm, method = "spearman", use = "pairwise.complete.obs")
 
 
 
@@ -195,6 +195,10 @@ cor_heatmap(cor_avg_hg)
 cor_heatmap(cor_avg_mm)
 
 
+cor_heatmap(cor_cv_hg)
+cor_heatmap(cor_cv_mm)
+
+
 
 hclust_hg <- hclust(d = as.dist(1 - cor_avg_hg))
 hclust_mm <- hclust(d = as.dist(1 - cor_avg_mm))
@@ -213,14 +217,38 @@ clus_df_mm <- data.frame(Group = cutree(hclust_mm, k = 2)) %>%
   left_join(filter(mcg_meta, Species == "Mouse"), by = "ID")
 
 
+
+
+# Count of cells by cluster
 boxplot(log10(clus_df_hg$N_cells+1) ~ clus_df_hg$Group)
 wilcox.test(clus_df_hg$N_cells ~ clus_df_hg$Group)
 # kruskal.test(clus_df_hg$N_cells ~ clus_df_hg$Group)
 
-
 boxplot(log10(clus_df_mm$N_cells+1) ~ clus_df_mm$Group)
 wilcox.test(clus_df_mm$N_cells ~ clus_df_mm$Group)
 # kruskal.test(clus_df_mm$N_cells ~ clus_df_mm$Group)
+
+
+# Median UMI by cluster
+boxplot(log10(clus_df_hg$Median_UMI+1) ~ clus_df_hg$Group)
+wilcox.test(clus_df_hg$Median_UMI+1 ~ clus_df_hg$Group)
+# kruskal.test(clus_df_hg$N_cells ~ clus_df_hg$Group)
+
+boxplot(log10(clus_df_mm$Median_UMI+1) ~ clus_df_mm$Group)
+wilcox.test(clus_df_mm$Median_UMI+1 ~ clus_df_mm$Group)
+# kruskal.test(clus_df_hg$N_cells ~ clus_df_hg$Group)
+
+
+
+# Gene msr by cluster
+boxplot(log10(clus_df_hg$N_msr_postfilt+1) ~ clus_df_hg$Group)
+wilcox.test(clus_df_hg$N_msr_postfilt+1 ~ clus_df_hg$Group)
+# kruskal.test(clus_df_hg$N_cells ~ clus_df_hg$Group)
+
+boxplot(log10(clus_df_mm$N_msr_postfilt+1) ~ clus_df_mm$Group)
+wilcox.test(clus_df_mm$N_msr_postfilt+1 ~ clus_df_mm$Group)
+# kruskal.test(clus_df_hg$N_cells ~ clus_df_hg$Group)
+
 
 
 
