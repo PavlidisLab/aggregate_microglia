@@ -121,8 +121,8 @@ cutoff_hg <- 0.3
 hist(log10(count_summ$Summ_hg$Avg + 1), breaks = 1000)
 abline(v = cutoff_hg, col = "red")
 
-# keep_hg <- filter(count_summ$Summ_hg, N_msr > 0 & Avg > 0 & Med > 0) %>% arrange(desc(Avg))
-keep_hg <- filter(count_summ$Summ_hg, log10(Avg + 1) > cutoff_hg) %>% arrange(desc(Avg))
+keep_hg <- filter(count_summ$Summ_hg, N_msr > 0 & Avg > 0 & Med > 0) %>% arrange(desc(Avg))
+# keep_hg <- filter(count_summ$Summ_hg, log10(Avg + 1) > cutoff_hg) %>% arrange(desc(Avg))
 # keep_hg <- filter(count_summ$Summ_hg, N_msr > 2) %>% arrange(desc(N_msr))
 # keep_hg <- filter(count_summ$Summ_hg, N_msr > 0 & Avg > 0) %>% arrange(desc(Avg))
 
@@ -134,8 +134,8 @@ cutoff_mm <- 0.5
 hist(log10(count_summ$Summ_mm$Avg + 1), breaks = 1000)
 abline(v = cutoff_mm, col = "red")
 
-# keep_mm <- filter(count_summ$Summ_mm, N_msr > 0 & Avg > 0 & Med > 0) %>% arrange(desc(Avg))
-keep_mm <- filter(count_summ$Summ_mm, log10(Avg + 1) > cutoff_mm) %>% arrange(desc(Avg))
+keep_mm <- filter(count_summ$Summ_mm, N_msr > 0 & Avg > 0 & Med > 0) %>% arrange(desc(Avg))
+# keep_mm <- filter(count_summ$Summ_mm, log10(Avg + 1) > cutoff_mm) %>% arrange(desc(Avg))
 # keep_mm <- filter(count_summ$Summ_mm, N_msr > 5) %>% arrange(desc(N_msr))
 # keep_mm <- filter(count_summ$Summ_mm, N_msr > 0 & Avg > 0) %>% arrange(desc(Avg))
 
@@ -153,7 +153,6 @@ cor_avg_hg <- cor(count_summ$Avg_hg[keep_hg$Symbol, ], method = "spearman")
 cor_avg_mm <- cor(count_summ$Avg_mm[keep_mm$Symbol, ], method = "spearman")
 # cor_avg_hg <- cor(avg_log_hg[keep_hg$Symbol, ], method = "spearman")
 # cor_avg_mm <- cor(avg_log_mm[keep_mm$Symbol, ], method = "spearman")
-
 
 cor_cv_hg <- cor(count_summ$CV_hg[keep_hg$Symbol, ], method = "spearman", use = "pairwise.complete.obs")
 cor_cv_mm <- cor(count_summ$CV_mm[keep_mm$Symbol, ], method = "spearman", use = "pairwise.complete.obs")
@@ -190,6 +189,16 @@ hclust_avg_mm <- hclust(d = as.dist(1 - cor_avg_mm))
 
 hclust_cv_hg <- hclust(d = as.dist(1 - cor_cv_hg))
 hclust_cv_mm <- hclust(d = as.dist(1 - cor_cv_mm))
+
+
+sil_avg_hg <- cluster::silhouette(cutree(hclust_avg_hg, k = 2), as.dist(1 - cor_avg_hg))
+mean(sil_avg_hg[, "sil_width"])
+plot(sil_avg_hg)
+
+
+sil_avg_mm <- cluster::silhouette(cutree(hclust_avg_mm, k = 2), as.dist(1 - cor_avg_mm))
+mean(sil_avg_mm[, "sil_width"])
+plot(sil_avg_mm)
 
 
 
