@@ -2,6 +2,7 @@
 
 ncore <- 8
 
+
 ## TODO: These are paths from the TRsc paper, consider dependancy
 
 # TRsc metadata
@@ -12,6 +13,15 @@ amat_dir <- "/space/scratch/amorin/TR_singlecell/"
 
 # List of cell types per dataset
 celltype_list_path <- "/space/scratch/amorin/R_objects/celltype_list.RDS"
+
+# ENSEMBL and Refseq Select protein coding paths
+ref_hg_path <- "/space/grp/amorin/Metadata/refseq_select_hg38.tsv"
+ref_mm_path <- "/space/grp/amorin/Metadata/refseq_select_mm10.tsv"
+ens_hg_path <- "/space/grp/amorin/Metadata/ensembl_human_protein_coding_105.tsv"
+ens_mm_path <- "/space/grp/amorin/Metadata/ensembl_mouse_protein_coding_105.tsv"
+
+
+
 
 ##
 
