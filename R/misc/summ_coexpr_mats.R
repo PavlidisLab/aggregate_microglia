@@ -1,6 +1,7 @@
 library(tidyverse)
 library(data.table)
 library(aggtools)
+library(pheatmap)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
@@ -98,3 +99,94 @@ if (!file.exists(outfile_mm)) {
   
 }
 
+
+
+##
+
+
+l_hg <- readRDS(outfile_hg)
+l_hg$CV_mat <- l_hg$SD_mat / l_hg$Avg_mat
+
+
+l_mm <- readRDS(outfile_mm)
+l_mm$CV_mat <- l_mm$SD_mat / l_mm$Avg_mat
+
+
+
+summ_df_hg <- cbind(
+  mat_to_df(l_hg$Avg_mat, value_name = "Avg"),
+  SD = mat_to_df(l_hg$SD_mat, value_name = "SD")[["SD"]],
+  CV =  mat_to_df(l_hg$CV_mat, value_name = "CV")[["CV"]],
+  N_msr = mat_to_df(l_hg$Msr_mat, value_name = "N_msr")[["N_msr"]]
+) %>%
+  arrange(desc(Avg))
+
+
+summ_df_mm <- cbind(
+  mat_to_df(l_mm$Avg_mat, value_name = "Avg"),
+  SD = mat_to_df(l_mm$SD_mat, value_name = "SD")[["SD"]],
+  CV =  mat_to_df(l_mm$CV_mat, value_name = "CV")[["CV"]],
+  N_msr = mat_to_df(l_mm$Msr_mat, value_name = "N_msr")[["N_msr"]]
+) %>%
+  arrange(desc(Avg))
+
+
+
+
+top_avg_hg <- summ_df_hg %>% 
+  filter(N_msr > 5) %>% 
+  slice_max(abs(Avg), n = 10e3)
+
+top_sd_hg <- summ_df_hg %>% 
+  filter(N_msr > 5) %>% 
+  slice_max(SD, n = 10e3)
+
+top_cv_hg <- summ_df_hg %>% 
+  filter(N_msr > 5) %>% 
+  slice_max(CV, n = 10e3)
+
+
+
+top_avg_mm <- summ_df_mm %>% 
+  filter(N_msr > 5) %>% 
+  slice_max(abs(Avg), n = 10e3)
+
+top_sd_mm <- summ_df_mm %>% 
+  filter(N_msr > 5) %>% 
+  slice_max(SD, n = 10e3)
+
+top_cv_mm <- summ_df_mm %>% 
+  filter(N_msr > 5) %>% 
+  slice_max(CV, n = 10e3)
+
+
+
+
+
+cor.test(
+  filter(summ_df_hg, N_msr > 5)[["Avg"]],
+  filter(summ_df_hg, N_msr > 5)[["SD"]],
+  method = "spearman"
+)
+
+
+
+cor.test(
+  filter(summ_df_mm, N_msr > 5)[["Avg"]],
+  filter(summ_df_mm, N_msr > 5)[["SD"]],
+  method = "spearman"
+)
+
+
+
+ggplot(top_avg_hg, aes(x = Avg, y = SD)) +
+  geom_point(shape = 21, alpha = 0.5) +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+
+ggplot(top_avg_mm, aes(x = Avg, y = SD)) +
+  geom_point(shape = 21, alpha = 0.5) +
+  theme_classic() +
+  theme(text = element_text(size = 25))
