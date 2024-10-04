@@ -22,15 +22,11 @@ dat_l <- readRDS(mcg_dat_path)
 mcg_meta <- distinct(mcg_meta, ID, .keep_all = TRUE)
 
 
-# TODO: summarization into a function
-# TODO: add more rank-based summarization; weigh against scaling counts
-# TODO: is parallel helping or slowing
-
-
-
 # Assumes dat_l contains a gene x cell CPM matrix called "Mat"
 # Assumes all matrices have the same genes and ordering
-# Note: matrixStats requires coercing sparse to dense.
+# Returns a list of the gene x experiment point estimates, as well as a summary
+# df collapsing these summarizations across all datasets
+# Note: matrixStats requires coercing sparse count matrices to dense.
 
 summarize_count_list <- function(dat_l) {
   
@@ -87,102 +83,15 @@ if (!file.exists(count_summ_path)) {
   count_summ_hg <- summarize_count_list(dat_l[ids_hg])
   count_summ_mm <- summarize_count_list(dat_l[ids_mm])
   saveRDS(list(Human = count_summ_hg, Mouse = count_summ_mm), count_summ_path)
+  write.table(count_summ$Human$Summ_df, sep = "\t", quote = FALSE, row.names = FALSE, file = count_summ_table_hg)
+  write.table(count_summ$Mouse$Summ_df, sep = "\t", quote = FALSE, row.names = FALSE, file = count_summ_table_mm)
 } else {
   count_summ <- readRDS(count_summ_path)
 }
 
 
 
-# calc_count_summaries <- function(dat_l, ids_hg, ids_mm) {
-#   
-#   
-#   avg_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) rowMeans(x$Mat), mc.cores = ncore))
-#   avg_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) rowMeans(x$Mat), mc.cores = ncore))
-#   
-#   med_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) apply(x$Mat, 1, median), mc.cores = ncore))
-#   med_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) apply(x$Mat, 1, median), mc.cores = ncore))
-#   
-#   sd_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) apply(x$Mat, 1, sd), mc.cores = ncore))
-#   sd_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) apply(x$Mat, 1, sd), mc.cores = ncore))
-#   
-#   cv_hg <- sd_hg / avg_hg
-#   cv_mm <- sd_mm / avg_mm
-#   
-#   msr_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) rowSums(zero_sparse_cols(x$Mat)) != 0, mc.cores = ncore))
-#   msr_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) rowSums(zero_sparse_cols(x$Mat)) != 0, mc.cores = ncore))
-#   
-#   
-#   summ_hg <- data.frame(
-#     Symbol = rownames(avg_hg),
-#     Avg = rowMeans(avg_hg, na.rm = TRUE),
-#     Med = rowMeans(med_hg, na.rm = TRUE),
-#     SD = rowMeans(sd_hg, na.rm = TRUE),
-#     CV = rowMeans(cv_hg, na.rm = TRUE),
-#     N_msr = rowSums(msr_hg)
-#   )
-#   
-#   
-#   summ_mm <- data.frame(
-#     Symbol = rownames(avg_mm),
-#     Avg = rowMeans(avg_mm, na.rm = TRUE),
-#     Med = rowMeans(med_mm, na.rm = TRUE),
-#     SD = rowMeans(sd_mm, na.rm = TRUE),
-#     CV = rowMeans(cv_mm, na.rm = TRUE),
-#     N_msr = rowSums(msr_mm)
-#   )
-#   
-#   list(Avg_hg = avg_hg,
-#        Avg_mm = avg_mm,
-#        Med_hg = med_hg,
-#        Med_mm = med_mm,
-#        SD_hg = sd_hg,
-#        SD_mm = sd_mm,
-#        CV_hg = cv_hg,
-#        CV_mm = cv_mm,
-#        Msr_hg = msr_hg,
-#        Msr_mm = msr_mm,
-#        Summ_hg = summ_hg,
-#        Summ_mm = summ_mm)
-#   
-#   
-# }
 
-
-
-# if (!file.exists(count_summ_path)) {
-#   count_summ <- calc_count_summaries(dat_l, ids_hg, ids_mm)
-#   saveRDS(count_summ, count_summ_path)
-# } else {
-#   count_summ <- readRDS(count_summ_path)
-# }
-
-
-# rank_avg_hg <- aggtools::colrank_mat(count_summ$Avg_hg)
-# rank_avg_mm <- aggtools::colrank_mat(count_summ$Avg_mm)
-# 
-# avg_log_hg <- do.call(cbind, mclapply(dat_l[ids_hg], function(x) rowMeans(log2(x$Mat+1)), mc.cores = ncore))
-# avg_log_mm <- do.call(cbind, mclapply(dat_l[ids_mm], function(x) rowMeans(log2(x$Mat+1)), mc.cores = ncore))
-
-
-
-# count_summ$Summ_hg <- cbind(
-#   count_summ$Summ_hg,
-#   Avg_log_avg = rowMeans(avg_log_hg),
-#   Avg_rank_avg = rowMeans(rank_avg_hg),
-#   RP_avg = rank((rowSums(log(rank_avg_hg)) / nrow(rank_avg_hg)))
-# )
-# 
-# 
-# count_summ$Summ_mm <- cbind(
-#   count_summ$Summ_mm,
-#   Avg_log_avg = rowMeans(avg_log_mm),
-#   Avg_rank_avg = rowMeans(rank_avg_mm),
-#   RP_avg = rank((rowSums(log(rank_avg_mm)) / nrow(rank_avg_mm)))
-# )
-
-
-
-stop()
 
 
 
