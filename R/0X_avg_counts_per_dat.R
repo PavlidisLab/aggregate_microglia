@@ -43,7 +43,7 @@ summarize_count_list <- function(dat_l) {
   cv <- sd / avg
   
   # Quantile normalize the averaged profiles
-  qn_avg <- preprocessCore::normalize.quantiles(avg)
+  qn_avg <- preprocessCore::normalize.quantiles(avg, keep.names = FALSE)
   
   # Rank and rank product of the averaged profiles
   rank_avg <- aggtools::colrank_mat(avg)
@@ -98,30 +98,31 @@ if (!file.exists(count_summ_path)) {
 # Trying to figure out genes with acceptable enough expression to keep
 # ------------------------------------------------------------------------------
 
-
+summ_df_hg <- count_summ$Human$Summ_df
 cutoff_hg <- 0.3
-hist(log10(count_summ$Summ_hg$Avg + 1), breaks = 1000)
+hist(summ_df_hg$Avg, breaks = 1000)
 abline(v = cutoff_hg, col = "red")
 
-# keep_hg <- filter(count_summ$Summ_hg, N_msr > 0 & Avg > 0 & Med > 0) %>% arrange(desc(Avg))
-keep_hg <- filter(count_summ$Summ_hg, log10(Avg + 1) > cutoff_hg) %>% arrange(desc(Avg))
-# keep_hg <- filter(count_summ$Summ_hg, N_msr > 2) %>% arrange(desc(N_msr))
-# keep_hg <- filter(count_summ$Summ_hg, N_msr > 0 & Avg > 0) %>% arrange(desc(Avg))
+# keep_hg <- filter(summ_df_hg, N_msr > 0 & Avg > 0 & Med > 0) %>% arrange(desc(Avg))
+# keep_hg <- filter(summ_df_hg, Avg > cutoff_hg) %>% arrange(desc(Avg))
+keep_hg <- filter(summ_df_hg, N_msr > 5) %>% arrange(desc(N_msr))
+# keep_hg <- filter(summ_df_hg, N_msr > 0 & Avg > 0) %>% arrange(desc(Avg))
 
-hist(log10(keep_hg$Avg + 1), breaks = 1000)
+hist(keep_hg$Avg, breaks = 1000)
 
 
 
+summ_df_mm <- count_summ$Mouse$Summ_df
 cutoff_mm <- 0.5
-hist(log10(count_summ$Summ_mm$Avg + 1), breaks = 1000)
+hist(summ_df_mm$Avg, breaks = 1000)
 abline(v = cutoff_mm, col = "red")
 
-# keep_mm <- filter(count_summ$Summ_mm, N_msr > 0 & Avg > 0 & Med > 0) %>% arrange(desc(Avg))
-keep_mm <- filter(count_summ$Summ_mm, log10(Avg + 1) > cutoff_mm) %>% arrange(desc(Avg))
-# keep_mm <- filter(count_summ$Summ_mm, N_msr > 5) %>% arrange(desc(N_msr))
-# keep_mm <- filter(count_summ$Summ_mm, N_msr > 0 & Avg > 0) %>% arrange(desc(Avg))
+# keep_mm <- filter(summ_df_mm, N_msr > 0 & Avg > 0 & Med > 0) %>% arrange(desc(Avg))
+# keep_mm <- filter(summ_df_mm, Avg > cutoff_mm) %>% arrange(desc(Avg))
+keep_mm <- filter(summ_df_mm, N_msr > 5) %>% arrange(desc(N_msr))
+# keep_mm <- filter(summ_df_mm, N_msr > 0 & Avg > 0) %>% arrange(desc(Avg))
 
-hist(log10(keep_mm$Avg + 1), breaks = 1000)
+hist(keep_mm$Avg, breaks = 1000)
 
 
 
@@ -131,10 +132,8 @@ hist(log10(keep_mm$Avg + 1), breaks = 1000)
 # ------------------------------------------------------------------------------
 
 
-cor_avg_hg <- cor(count_summ$Avg_hg[keep_hg$Symbol, ], method = "spearman")
-cor_avg_mm <- cor(count_summ$Avg_mm[keep_mm$Symbol, ], method = "spearman")
-# cor_avg_hg <- cor(avg_log_hg[keep_hg$Symbol, ], method = "spearman")
-# cor_avg_mm <- cor(avg_log_mm[keep_mm$Symbol, ], method = "spearman")
+cor_avg_hg <- cor(count_summ$Human$QN_Avg[keep_hg$Symbol, ], method = "spearman")
+cor_avg_mm <- cor(count_summ$Mouse$QN_Avg[keep_mm$Symbol, ], method = "spearman")
 
 cor_cv_hg <- cor(count_summ$CV_hg[keep_hg$Symbol, ], method = "spearman", use = "pairwise.complete.obs")
 cor_cv_mm <- cor(count_summ$CV_mm[keep_mm$Symbol, ], method = "spearman", use = "pairwise.complete.obs")
