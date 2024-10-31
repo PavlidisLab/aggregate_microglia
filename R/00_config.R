@@ -40,3 +40,7 @@ cell_cor_path <- "/space/scratch/amorin/aggregate_microglia/microglia_cell_cors.
 # Summary of gene counts across experiments
 count_summ_path <- "/space/scratch/amorin/aggregate_microglia/microglia_gene_count_summaries.RDS"
   
+
+# Summary tables of count
+count_summ_table_hg <- "/space/scratch/amorin/aggregate_microglia/microglia_gene_count_summary_hg.tsv"
+count_summ_table_mm <- "/space/scratch/amorin/aggregate_microglia/microglia_gene_count_summary_mm.tsv"
