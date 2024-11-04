@@ -1,4 +1,4 @@
-## TODO
+## TODO: Keep genes as stored vector (instead of filtered df?)
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -112,6 +112,15 @@ cutoff_mm <- floor(length(ids_mm) * (1/3))
 keep_mm <- filter(summ_df_mm, N_msr >= cutoff_mm) %>% arrange(desc(Avg))
 
 
+
+
+
+
+# Plots
+# ------------------------------------------------------------------------------
+
+
+# Hists before/after filter 
 hist(summ_df_hg$Avg, breaks = 1000)
 hist(keep_hg$Avg, breaks = 1000)
 
@@ -120,47 +129,80 @@ hist(keep_mm$Avg, breaks = 1000)
 
 
 
+# Vbplot of counts for given gene
+
+
+vbplot <- function(dat_l, gene) {
+  
+  ids <- names(dat_l)
+  
+  gene_l <- lapply(ids, function(x) {
+    data.frame(Log2_count = log2(dat_l[[x]]$Mat[gene, ] + 1), ID = x)
+  })
+  
+  gene_df <- do.call(rbind, gene_l)
+  
+  ggplot(gene_df, aes(x = ID, y = Log2_count)) +
+    geom_violin(fill = "slategrey") +
+    geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
+    ylab("Log[[2]] CPM") +
+    ggtitle(gene) +
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          axis.title.y = element_text(size = 20),
+          axis.title.x = element_blank(),
+          plot.title = element_text(size = 20),
+          plot.margin = margin(c(10, 20, 10, 10)))
+}
 
 
 
+# The max average gene
+vbplot(dat_l[ids_hg], slice_max(keep_hg, QN_avg, n = 1)$Symbol)
+vbplot(dat_l[ids_mm], slice_max(keep_mm, QN_avg, n = 1)$Symbol)
+
+# The lowest average gene that was kept
+vbplot(dat_l[ids_hg], slice_min(keep_hg, QN_avg, n = 1)$Symbol)
+vbplot(dat_l[ids_mm], slice_min(keep_mm, QN_avg, n = 1)$Symbol)
+
+# The highest average gene that was removed
+gene_hg <- filter(summ_df_hg, Symbol %!in% keep_hg$Symbol) %>% slice_max(QN_avg, n = 1) %>% pull(Symbol)
+gene_mm <- filter(summ_df_mm, Symbol %!in% keep_mm$Symbol) %>% slice_max(QN_avg, n = 1) %>% pull(Symbol)
+vbplot(dat_l[ids_hg], gene_hg)
+vbplot(dat_l[ids_mm], gene_mm)
 
 
 # Plotting average expression of counts
-# ------------------------------------------------------------------------------
 
-# head(count_summ$Summ_hg)
+# TODO: w/o keep_df
+plot_avg_heatmap <- function(summ_l, keep_df) {
+  
+  # gene_order <- arrange(keep_df, desc(QN_avg))$Symbol
+  # gene_order <- filter(summ_l$Summ_df, N_msr == max(N_msr)) %>% arrange(desc(QN_avg)) %>% pull(Symbol)
+  gene_order <- slice_min(summ_l$Summ_df, RP, n = 500) %>% arrange(desc(QN_avg)) %>% pull(Symbol)
+  
+  plot_mat <- summ_l$QN_Avg
+  plot_mat <- plot_mat[gene_order, ]
+  plot_mat <- cbind(plot_mat, Average = summ_l$Summ_df[gene_order, "QN_avg"])
+  
+  # plot_mat <- scale(plot_mat)
+  # plot_mat[plot_mat > 3] <- 3
+  
+  pheatmap(plot_mat,
+           cluster_rows = FALSE,
+           cluster_cols = FALSE,
+           color = RColorBrewer::brewer.pal(9, "Blues"),
+           show_rownames = FALSE,
+           border_color = NA,
+           fontsize = 20,
+           gaps_col = ncol(plot_mat) - 1)
+  
+}
 
-plot_mat <- count_summ$Avg_hg[keep_hg$Symbol, ]
-plot_mat <- cbind(plot_mat, Average = count_summ$Summ_hg[keep_hg$Symbol, "Avg"])
-plot_mat <- scale(plot_mat)
-plot_mat[plot_mat > 3] <- 3
 
-pheatmap(plot_mat,
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         color = RColorBrewer::brewer.pal(9, "Blues"),
-         show_rownames = FALSE,
-         # breaks = seq(0, 1, length.out = 10),
-         border_color = NA,
-         fontsize = 20,
-         gaps_col = ncol(plot_mat) - 1)
-
-
-
-plot_mat <- count_summ$Avg_mm[keep_mm$Symbol, ]
-plot_mat <- cbind(plot_mat, Average = count_summ$Summ_mm[keep_mm$Symbol, "Avg"])
-plot_mat <- scale(plot_mat)
-plot_mat[plot_mat > 3] <- 3
-
-pheatmap(plot_mat,
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         color = RColorBrewer::brewer.pal(9, "Blues"),
-         show_rownames = FALSE,
-         # breaks = seq(0, 1, length.out = 10),
-         border_color = NA,
-         fontsize = 20,
-         gaps_col = ncol(plot_mat) - 1)
+plot_avg_heatmap(count_summ$Human, keep_hg)
+plot_avg_heatmap(count_summ$Mouse, keep_mm)
 
 
 
@@ -204,7 +246,7 @@ pheatmap(plot_mat,
 
 
 plot_mat <- dat_l$GSE118020$Mat
-plot_mat <- cbind(plot_mat, Average = count_summ$Avg_mm[, "GSE118020"])
+plot_mat <- cbind(plot_mat, Average = count_summ$Mouse$QN_Avg[, "GSE118020"])
 
 
 pheatmap(plot_mat,
@@ -218,17 +260,3 @@ pheatmap(plot_mat,
          fontsize = 20,
          gaps_col = ncol(plot_mat) - 1)
 
-
-
-
-
-
-
-
-
-# More deviation between avg and median at lower end
-plot(summ_hg$Avg, summ_hg$Med)
-plot(summ_hg$Avg[summ_hg$Avg < 1000 & summ_hg$Med], summ_hg$Med[summ_hg$Avg < 1000 & summ_hg$Med])
-
-plot(summ_hg$Avg, summ_hg$SD)
-plot(summ_hg$Med, summ_hg$CV)
