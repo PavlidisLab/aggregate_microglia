@@ -1,3 +1,6 @@
+## 
+## -----------------------------------------------------------------------------
+
 library(tidyverse)
 library(data.table)
 library(aggtools)
@@ -134,29 +137,29 @@ summ_df_mm <- cbind(
 
 
 top_avg_hg <- summ_df_hg %>% 
-  filter(N_msr > 5) %>% 
+  filter(N_msr > floor(nrow(meta_hg) * 1/3)) %>% 
   slice_max(abs(Avg), n = 10e3)
 
 top_sd_hg <- summ_df_hg %>% 
-  filter(N_msr > 5) %>% 
+  filter(N_msr > floor(nrow(meta_hg) * 1/3)) %>% 
   slice_max(SD, n = 10e3)
 
 top_cv_hg <- summ_df_hg %>% 
-  filter(N_msr > 5) %>% 
+  filter(N_msr > floor(nrow(meta_hg) * 1/3)) %>% 
   slice_max(CV, n = 10e3)
 
 
 
 top_avg_mm <- summ_df_mm %>% 
-  filter(N_msr > 5) %>% 
+  filter(N_msr > floor(nrow(meta_mm) * 1/3)) %>% 
   slice_max(abs(Avg), n = 10e3)
 
 top_sd_mm <- summ_df_mm %>% 
-  filter(N_msr > 5) %>% 
+  filter(N_msr > floor(nrow(meta_mm) * 1/3)) %>% 
   slice_max(SD, n = 10e3)
 
 top_cv_mm <- summ_df_mm %>% 
-  filter(N_msr > 5) %>% 
+  filter(N_msr > floor(nrow(meta_mm) * 1/3)) %>% 
   slice_max(CV, n = 10e3)
 
 

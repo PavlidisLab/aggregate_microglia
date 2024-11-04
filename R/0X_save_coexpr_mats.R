@@ -8,11 +8,9 @@ source("R/utils/functions.R")
 pc_df_hg <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
 pc_df_mm <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
 
-# Save matrices to these directories
-out_hg <- "/space/scratch/amorin/TR_singlecell/Microglia/Hg_pcor_test/"
-out_mm <- "/space/scratch/amorin/TR_singlecell/Microglia/Mm_pcor_test/"
-dir.create(out_hg, showWarnings = FALSE)
-dir.create(out_mm, showWarnings = FALSE)
+
+
+
 
 # Microglia meta with file paths
 mcg_meta <- read.delim(mcg_meta_path) %>% distinct(ID, .keep_all = TRUE)
@@ -114,7 +112,7 @@ save_coexpr_multi_dataset(
   input_df = meta_hg,
   pc_df = pc_df_hg,
   cor_method = "pearson",
-  out_dir = out_hg
+  out_dir = cmat_dir_hg
 )
 
 
@@ -122,6 +120,6 @@ save_coexpr_multi_dataset(
   input_df = meta_mm,
   pc_df = pc_df_mm,
   cor_method = "pearson",
-  out_dir = out_mm
+  out_dir = cmat_dir_mm
 )
 
