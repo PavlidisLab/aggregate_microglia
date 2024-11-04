@@ -1,9 +1,11 @@
-
+# TODO: most harmonious dir create 
+# dir.create(out_hg, showWarnings = FALSE)
+# dir.create(out_mm, showWarnings = FALSE)
 
 ncore <- 8
 
 
-## TODO: These are paths from the TRsc paper, consider dependancy
+## TODO: These are paths from the TRsc paper, FIX dependency
 
 # TRsc metadata
 sc_meta_path <- "/space/grp/amorin/Metadata/single_cell_dataset_meta.tsv"
@@ -21,9 +23,15 @@ ens_hg_path <- "/space/grp/amorin/Metadata/ensembl_human_protein_coding_105.tsv"
 ens_mm_path <- "/space/grp/amorin/Metadata/ensembl_mouse_protein_coding_105.tsv"
 
 
-
-
 ##
+
+
+
+
+# Save matrices to these directories
+cmat_dir_hg <- "/space/scratch/amorin/aggregate_microglia/Cormats/Hg_pcor/"
+cmat_dir_mm <- "/space/scratch/amorin/aggregate_microglia/Cormats/Mm_pcor/"
+
 
 
 
