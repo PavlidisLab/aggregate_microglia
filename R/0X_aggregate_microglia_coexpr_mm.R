@@ -48,7 +48,7 @@ save_function_results(
     input_df = meta,
     pc_df = pc_df,
     cor_method = "pearson",
-    agg_method = "RSR"
+    agg_method = "allrank"
   )
 )
 
@@ -58,10 +58,10 @@ save_function_results(
 if (!file.exists(fz_tsv_path)) {
   
   agg_l <- readRDS(fz_path)
-  fwrite_mat(aggr_l$Agg_mat, fz_tsv_path)
+  fwrite_mat(agg_l$Agg_mat, fz_tsv_path)
   
   if (!file.exists(na_tsv_path)) {
-    fwrite_mat(aggr_l$NA_mat, na_tsv_path)
+    fwrite_mat(agg_l$NA_mat, na_tsv_path)
   }
 
 }
@@ -69,13 +69,13 @@ if (!file.exists(fz_tsv_path)) {
 
 
 # RSR matrix as .tsv files
-if (!file.exists(fz_tsv_path)) {
+if (!file.exists(rsr_tsv_path)) {
   
   agg_l <- readRDS(fz_path)
-  fwrite_mat(aggr_l$Agg_mat, fz_tsv_path)
+  fwrite_mat(agg_l$Agg_mat, rsr_tsv_path)
   
   if (!file.exists(na_tsv_path)) {
-    fwrite_mat(aggr_l$NA_mat, na_tsv_path)
+    fwrite_mat(agg_l$NA_mat, na_tsv_path)
   }
   
 }
