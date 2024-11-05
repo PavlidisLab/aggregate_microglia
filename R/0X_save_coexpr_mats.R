@@ -20,30 +20,6 @@ meta_mm <- filter(mcg_meta, Species == "Mouse")
 
 ##
 
-
-prepare_celltype_mat <- function(id, mat, meta, pc_df, cell_type, min_cell = 20) {
-  
-  stopifnot(inherits(mat, "dgCMatrix"),
-            c("ID", "Cell_type") %in% colnames(meta),
-            cell_type %in% meta[["Cell_type"]],
-            identical(rownames(mat), pc_df$Symbol))
-  
-  # ids <- meta[meta$Cell_type %in% cell_type, "ID"][["ID"]]
-  ids <- filter(meta, Cell_type %in% cell_type) %>% pull(ID)
-  
-  if (!all(ids %in% colnames(mat))) {
-    message(paste(id, "did not have all meta IDs in mat column names"))
-    ids <- intersect(ids, colnames(mat))
-  }
-  
-  ct_mat <- t(mat[pc_df$Symbol, ids])
-  ct_mat <- zero_sparse_cols(ct_mat, min_cell)
-  
-  return(ct_mat)
-}
-
-
-
 save_coexpr_multi_dataset <- function(input_df,
                                       pc_df,
                                       cor_method,
@@ -70,8 +46,7 @@ save_coexpr_multi_dataset <- function(input_df,
     
     dat <- load_scdat(dat_path)
     
-    ct_mat <- prepare_celltype_mat(id = id,
-                                   mat = dat[["Mat"]],
+    ct_mat <- prepare_celltype_mat(mat = dat[["Mat"]],
                                    meta = dat[["Meta"]],
                                    pc_df = pc_df,
                                    cell_type = ct,
