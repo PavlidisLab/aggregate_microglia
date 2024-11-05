@@ -1,4 +1,4 @@
-## 
+## TODO:
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -12,15 +12,11 @@ source("R/utils/functions.R")
 pc_df_hg <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
 pc_df_mm <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
 
-# 
-dir_hg <- "/space/scratch/amorin/TR_singlecell/Microglia/Hg_pcor_test/"
-dir_mm <- "/space/scratch/amorin/TR_singlecell/Microglia/Mm_pcor_test/"
+cor_paths_hg <- list.files(cmat_dir_hg, full.names = TRUE, pattern = "cormat.tsv")
+cor_paths_mm <- list.files(cmat_dir_mm, full.names = TRUE, pattern = "cormat.tsv")
 
-cor_paths_hg <- list.files(dir_hg, full.names = TRUE, pattern = "cormat.tsv")
-cor_paths_mm <- list.files(dir_mm, full.names = TRUE, pattern = "cormat.tsv")
-
-outfile_hg <- file.path(dir_hg, "raw_cor_avg_sd_msr_list_hg.RDS")
-outfile_mm <- file.path(dir_mm, "raw_cor_avg_sd_msr_list_mm.RDS")
+outfile_hg <- file.path(cmat_dir_hg, "raw_cor_avg_sd_msr_cv_list_hg.RDS")
+outfile_mm <- file.path(cmat_dir_mm, "raw_cor_avg_sd_msr_cv_list_mm.RDS")
 
 
 # Microglia meta with file paths
@@ -29,47 +25,44 @@ meta_hg <- filter(mcg_meta, Species == "Human")
 meta_mm <- filter(mcg_meta, Species == "Mouse")
 
 
-# hg_l <- lapply(paths_hg[1], fread_to_mat, genes = pc_df_hg$Symbol)
-# # hg_l[[2]] <- hg_l[[1]]
-# msr_hg <- Reduce("+", lapply(hg_l, function(x) !is.na(x)))
-# avg_hg <- Reduce("+", hg_l) / msr_hg
-# sd_hg <- apply(simplify2array(hg_l), 1:2, sd, na.rm = TRUE)
 
 
+# TODO:
 
 calc_avg_and_na <- function(paths, pc_df, verbose = TRUE) {
   
-  amat <- msr_mat <- init_agg_mat(pc_df)
+  avg_mat <- msr_mat <- init_agg_mat(pc_df)
   
   for (file in paths) {
     message(paste(file, Sys.time()))
     cmat <- fread_to_mat(file, genes = pc_df$Symbol)
     non_na <- !is.na(cmat)
-    amat[non_na] <- amat[non_na] + cmat[non_na]
+    avg_mat[non_na] <- avg_mat[non_na] + cmat[non_na]
     msr_mat[non_na] <- msr_mat[non_na] + 1
     rm(cmat)
     gc(verbose = FALSE)
   }
   
-  amat <- amat / msr_mat
+  avg_mat <- avg_mat / msr_mat
   
-  return(list(Avg_mat = amat, Msr_mat = msr_mat))
+  return(list(Avg_mat = avg_mat, Msr_mat = msr_mat))
   
 }
 
 
 
-calc_sd <- function(paths, pc_df, amat, verbose = TRUE) {
+calc_sd <- function(paths, pc_df, avg_l, verbose = TRUE) {
   
-  var_mat <- msr_mat <- init_agg_mat(pc_df)
+  var_mat <- init_agg_mat(pc_df)
+  avg_mat <- avg_l$Avg_mat
+  msr_mat <- avg_l$Msr_mat
   
   for (file in paths) {
     message(paste(file, Sys.time()))
     cmat <- fread_to_mat(file, genes = pc_df$Symbol)
     non_na <- !is.na(cmat)
-    diff <- (cmat[non_na] - amat[non_na])^2
+    diff <- (cmat[non_na] - avg_mat[non_na])^2
     var_mat[non_na] <- var_mat[non_na] + diff
-    msr_mat[non_na] <- msr_mat[non_na] + 1
     rm(cmat)
     gc(verbose = FALSE)
   }
@@ -81,38 +74,42 @@ calc_sd <- function(paths, pc_df, amat, verbose = TRUE) {
 
 
 
-if (!file.exists(outfile_hg)) {
+prepare_summary_l <- function(paths, pc_df, verbose = TRUE) {
   
-  l_hg <- calc_avg_and_na(paths = cor_paths_hg, pc_df = pc_df_hg)
-  sd_hg <- calc_sd(paths = cor_paths_hg, pc_df = pc_df_hg, amat = l_hg$Avg_mat)
+  avg_l <- calc_avg_and_na(paths = paths, pc_df = pc_df)
+  sd_mat <- calc_sd(paths = paths, pc_df = pc_df, avg_l = avg_l)
+  summ_l <- avg_l
+  summ_l$SD_mat <- sd_mat
+  summ_l$CV_mat <- summ_l$SD_mat / summ_l$Avg_mat
   
-  saveRDS(list(Avg_mat = l_hg$Avg_mat, SD_mat = sd_hg, Msr_mat = l_hg$Msr_mat),
-          file = outfile_hg)
-  
+  return(summ_l)
 }
 
 
-if (!file.exists(outfile_mm)) {
+ 
+save_function_results(
+  path = outfile_hg,
+  fun = prepare_summary_l,
+  args = list(paths = cor_paths_hg, pc_df = pc_df_hg)
+)
   
-  l_mm <- calc_avg_and_na(paths = cor_paths_mm, pc_df = pc_df_mm)
-  sd_mm <- calc_sd(paths = cor_paths_mm, pc_df = pc_df_mm, amat = l_mm$Avg_mat)
-  
-  saveRDS(list(Avg_mat = l_mm$Avg_mat, SD_mat = sd_mm, Msr_mat = l_mm$Msr_mat),
-          file = outfile_mm)
-  
-}
 
 
+save_function_results(
+  path = outfile_mm,
+  fun = prepare_summary_l,
+  args = list(paths = cor_paths_mm, pc_df = pc_df_mm)
+)
+
+
+
+summ_hg <- readRDS(outfile_hg)
+summ_mm <- readRDS(outfile_mm)
+
+
+stop()
 
 ##
-
-
-l_hg <- readRDS(outfile_hg)
-l_hg$CV_mat <- l_hg$SD_mat / l_hg$Avg_mat
-
-
-l_mm <- readRDS(outfile_mm)
-l_mm$CV_mat <- l_mm$SD_mat / l_mm$Avg_mat
 
 
 
