@@ -38,6 +38,11 @@ cmat_dir_mm <- "/space/scratch/amorin/aggregate_microglia/Cormats/Mm_pcor/"
 # Microglia metadata path
 mcg_meta_path <- "/space/scratch/amorin/aggregate_microglia/microglia_metadata.tsv"
 
+# Macrophage metadata path
+macro_meta_path <- "/space/scratch/amorin/aggregate_microglia/macrophage_metadata.tsv"
+
+
+
 
 # Microglia list of mat/meta
 mcg_dat_path <- "/space/scratch/amorin/aggregate_microglia/microglia_dat_list.RDS"
