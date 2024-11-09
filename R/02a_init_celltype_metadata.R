@@ -1,4 +1,5 @@
-# Organizing tables corresponding to microglia cell types
+## Organizing tables corresponding to microglia cell types
+## -----------------------------------------------------------------------------
 
 library(tidyverse)
 source("R/00_config.R")
