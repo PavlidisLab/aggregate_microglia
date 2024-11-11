@@ -139,3 +139,34 @@ read_count_mat <- function(dat_path) {
   return(mat)
 }
 
+
+# Preparing data
+# ------------------------------------------------------------------------------
+
+
+
+# Create a filtered data frame of the cell types matching the input pattern
+
+# pattern: character vector of terms to search for within cell types
+# ct_list: list of dataset data.frames containing the cell types and their counts
+# sc_meta: data frame containing metadata information of datasets in ct_list
+# return: a data frame of the specified cell types and their counts, joined to sc_meta
+
+create_celltype_df <- function(pattern, ct_list, sc_meta) {
+  
+  keep_meta_cols <- c("ID", "Species", "Platform", "GEO_link", "Data_link")
+  
+  # Return list of relevant cell types matching string search
+  filt_ct_list <- lapply(ct_list, function(x) {
+    ct_vec <- str_to_lower(x$Ct_count$Cell_type)
+    match_indices <- str_detect(ct_vec, pattern)
+    x$Ct_count[match_indices, , drop = FALSE]
+  }) %>% 
+    discard(~nrow(.) == 0)
+  
+  # Bind into a df and join with relevant details from meta
+  ct_df <- bind_rows(filt_ct_list, .id = "ID") %>% 
+    left_join(., sc_meta[, keep_meta_cols], by = "ID")
+
+  return(ct_df)
+}
