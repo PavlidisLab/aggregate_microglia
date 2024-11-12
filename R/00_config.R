@@ -27,12 +27,13 @@ if (!dir.exists(cmat_dir_mm)) dir.create(cmat_dir_mm)
 
 
 ## TODO: These are paths from the TRsc paper, FIX dependency
+## TODO: or, alternatively, Borealis data download link
 
 # TRsc metadata
 sc_meta_path <- "/space/grp/amorin/Metadata/single_cell_dataset_meta.tsv"
 
 # Location of aggregate coexpression matrices
-amat_dir <- "/space/scratch/amorin/TR_singlecell/"
+amat_dir <- "/space/scratch/amorin/TR_singlecell"
 
 # List of cell types per dataset
 celltype_list_path <- "/space/scratch/amorin/R_objects/celltype_list.RDS"
@@ -49,12 +50,15 @@ ens_mm_path <- "/space/grp/amorin/Metadata/ensembl_mouse_protein_coding_105.tsv"
 
 
 # Cell type metadata paths
-mcg_meta_path <-  file.path(data_out_dir, "microglia_metadata.tsv")
+mcg_meta_path <- file.path(data_out_dir, "microglia_metadata.tsv")
+mcg_meta_dedup_path <- file.path(data_out_dir, "microglia_metadata_dedup.tsv")
 macro_meta_path <-  file.path(data_out_dir, "macrophage_metadata.tsv")
+macro_meta_dedup_path <-  file.path(data_out_dir, "macrophage_metadata_dedup.tsv")
 
 
 # Microglia list of count matrices and meta
 mcg_dat_path <-  file.path(data_out_dir, "microglia_dat_list.RDS")
+macro_dat_path <-  file.path(data_out_dir, "macrophage_dat_list.RDS")
 
 
 # Cell correlations per dataset
