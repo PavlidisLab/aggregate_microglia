@@ -6,7 +6,7 @@ library(data.table, quietly = TRUE)
 library(parallel)
 library(Matrix)
 library(qlcMatrix)
-library(DescTools)
+library(aggtools)
 
 
 
@@ -140,9 +140,9 @@ read_count_mat <- function(dat_path) {
 }
 
 
+
 # Preparing data
 # ------------------------------------------------------------------------------
-
 
 
 # Create a filtered data frame of the cell types matching the input pattern
@@ -169,4 +169,68 @@ create_celltype_df <- function(pattern, ct_list, sc_meta) {
     left_join(., sc_meta[, keep_meta_cols], by = "ID")
 
   return(ct_df)
+}
+
+
+
+# Return a list of single cell data subset to a cell type based on provided input_df
+# input_df: data.frame with dataset ID, data path, and cell type to filter
+# TODO: consider if aggtools::load_scdat() should be isolated
+
+load_and_filter_celltype <- function(input_df, verbose = TRUE) {
+  
+  ids <- unique(input_df$ID)
+  
+  dat_l <- lapply(ids, function(id) {
+    
+    if (verbose) message(paste(id, Sys.time()))
+    
+    df <- filter(input_df, ID == id)
+    path <- unique(df$Path)
+    dat <- aggtools::load_scdat(path)
+    meta <- filter(dat$Meta, Cell_type %in% df$Cell_type)
+    mat <- dat$Mat[, meta$ID, drop = FALSE]
+    
+    list(Mat = mat, Meta = meta)
+    
+  })
+  names(dat_l) <- ids
+  
+  return(dat_l)
+}
+
+
+
+
+# Add additional columns to meta on the gene measurement of data in dat_l
+# dat_l: list of single cell datasets (count matrix and metadata)
+# sc_meta: metadata table tracking the single cell experiments
+# -- Added columns:
+# N_msr_prefilt: Genes that had at least one count in any cell.
+# N_msr_posfilt: Genes that had at least one count in 20+ cells (for coexpression)
+# Median_UMI: Median UMI (or UMI-like) per cell -- measure of seq. depth
+
+add_counts_to_meta <- function(dat_l, sc_meta) {
+  
+  # Getting gene counts across all count matrices in dat_l
+  count_l <- lapply(dat_l, function(x) {
+    
+    prefilt <- t(x$Mat)
+    postfilt <- zero_sparse_cols(t(x$Mat))
+    
+    data.frame(
+      N_msr_prefilt = sum(colSums(prefilt) != 0),
+      N_msr_postfilt = sum(colSums(postfilt) != 0),
+      Median_UMI = median(x$Meta$UMI_counts)
+    )
+  })
+  
+  # Join counts with sc_meta, removing N_genes (as calc'd over all cell types)
+  sc_meta <- bind_rows(count_l) %>% 
+    mutate(ID = names(dat_l)) %>% 
+    left_join(., sc_meta, by = "ID") %>% 
+    dplyr::select(-N_genes) %>% 
+    relocate(c(N_msr_prefilt, N_msr_postfilt, Median_UMI), .after = N_celltypes)
+  
+  return(sc_meta)
 }
