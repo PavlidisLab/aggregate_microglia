@@ -154,7 +154,7 @@ read_count_mat <- function(dat_path) {
 
 create_celltype_df <- function(pattern, ct_list, sc_meta) {
   
-  keep_meta_cols <- c("ID", "Species", "Platform", "GEO_link", "Data_link")
+  keep_meta_cols <- c("ID", "Species", "Platform", "Design", "GEO_link", "Data_link")
   
   # Return list of relevant cell types matching string search
   filt_ct_list <- lapply(ct_list, function(x) {
@@ -229,8 +229,39 @@ add_counts_to_meta <- function(dat_l, sc_meta) {
   sc_meta <- bind_rows(count_l) %>% 
     mutate(ID = names(dat_l)) %>% 
     left_join(., sc_meta, by = "ID") %>% 
-    dplyr::select(-N_genes) %>% 
-    relocate(c(N_msr_prefilt, N_msr_postfilt, Median_UMI), .after = N_celltypes)
+    relocate(c(N_msr_prefilt, N_msr_postfilt, Median_UMI), .after = N_cells)
   
   return(sc_meta)
+}
+
+
+
+# A single dataset may have multiple relevant cell types, encoded as distinct
+# rows in the metadata. Collapse these rows into one such that each row of the 
+# metadata is a unique data ID
+
+collapse_dupl_ids <- function(sc_meta) {
+  
+  dupl_ids <- unique(sc_meta$ID[duplicated(sc_meta$ID)])
+  
+  dedupl_l <- lapply(dupl_ids, function(x) {
+    
+    df <- filter(sc_meta, ID == x)
+    ct <- paste(df$Cell_type, collapse = ";")
+    platform <- paste(unique(df$Platform), collapse = ";")
+    ncells <- sum(df$N_cells)
+    
+    df$Cell_type[1] <- ct
+    df$Platform[1] <- platform
+    df$N_cells[1] <- ncells
+    
+    df[1, ]
+    
+  })
+  
+  dedupl_meta <- bind_rows(dedupl_l) %>%
+    rbind(., filter(sc_meta, ID %!in% dupl_ids)) %>% 
+    arrange(match(ID, sc_meta$ID))
+  
+  return(dedupl_meta)
 }
