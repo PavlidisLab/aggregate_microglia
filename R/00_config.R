@@ -44,28 +44,28 @@ ref_mm_path <- "/space/grp/amorin/Metadata/refseq_select_mm10.tsv"
 ens_hg_path <- "/space/grp/amorin/Metadata/ensembl_human_protein_coding_105.tsv"
 ens_mm_path <- "/space/grp/amorin/Metadata/ensembl_mouse_protein_coding_105.tsv"
 
-
-##
+## ---
 
 
 
 # Cell type metadata paths
 mcg_meta_path <- file.path(data_out_dir, "microglia_metadata.tsv")
 mcg_meta_dedup_path <- file.path(data_out_dir, "microglia_metadata_dedup.tsv")
-macro_meta_path <-  file.path(data_out_dir, "macrophage_metadata.tsv")
-macro_meta_dedup_path <-  file.path(data_out_dir, "macrophage_metadata_dedup.tsv")
+macro_meta_path <- file.path(data_out_dir, "macrophage_metadata.tsv")
+macro_meta_dedup_path <- file.path(data_out_dir, "macrophage_metadata_dedup.tsv")
 
 
 # Microglia list of count matrices and meta
-mcg_dat_path <-  file.path(data_out_dir, "microglia_dat_list.RDS")
-macro_dat_path <-  file.path(data_out_dir, "macrophage_dat_list.RDS")
+mcg_dat_path <- file.path(data_out_dir, "microglia_dat_list.RDS")
+macro_dat_path <- file.path(data_out_dir, "macrophage_dat_list.RDS")
 
 
 # Cell correlations per dataset
-cell_cor_path <-  file.path(data_out_dir, "microglia_cell_cors.RDS")
+cell_cor_path <- file.path(data_out_dir, "microglia_cell_cors.RDS")
 
                             
 # Summary of gene counts across experiments
-count_summ_path <-  file.path(data_out_dir, "microglia_gene_count_summaries.RDS")
-count_summ_table_hg <-  file.path(data_out_dir, "microglia_gene_count_summary_hg.tsv")
-count_summ_table_mm <-  file.path(data_out_dir, "microglia_gene_count_summary_mm.tsv")
+mcg_count_summ_list_path <- file.path(data_out_dir, "microglia_gene_count_summary_list.RDS")
+mcg_count_summ_table_hg <- file.path(data_out_dir, "microglia_gene_count_summary_table_hg.tsv")
+mcg_count_summ_table_mm <- file.path(data_out_dir, "microglia_gene_count_summary_table_mm.tsv")
+macro_count_summ_list_path <- file.path(data_out_dir, "macrophage_gene_count_summary_list.RDS")
