@@ -7,6 +7,8 @@ library(parallel)
 library(Matrix)
 library(qlcMatrix)
 library(aggtools)
+library(preprocessCore)
+library(matrixStats)
 
 
 
@@ -264,4 +266,64 @@ collapse_dupl_ids <- function(sc_meta) {
     arrange(match(ID, sc_meta$ID))
   
   return(dedupl_meta)
+}
+
+
+
+# Create a list that summarizes gene count levels across all datasets in dat_l
+# dat_l: list of single cell datasets (count matrix and metadata)
+# Assumes dat_l contains a gene x cell CPM matrix called "Mat"
+# Assumes all matrices have the same genes and ordering
+# Note: matrixStats requires coercing sparse count matrices to dense.
+# TODO: consider checks
+
+summarize_gene_counts <- function(dat_l) {
+  
+  genes <- rownames(dat_l[[1]]$Mat)
+  stopifnot(length(genes) > 0, identical(genes, rownames(dat_l[[length(dat_l)]]$Mat)))
+  
+  # Log transform all CPM matrices first
+  dat_l <- lapply(dat_l, function(x) as.matrix(log2(x$Mat + 1)))  
+  gc(verbose = FALSE)
+  
+  # Get average, median, SD, and CV of log CPM counts and bind into a matrix
+  avg <- do.call(cbind, lapply(dat_l, rowMeans))
+  med <- do.call(cbind, lapply(dat_l, rowMedians))
+  sd <- do.call(cbind, lapply(dat_l, rowSds))
+  cv <- sd / avg
+  
+  # Quantile normalize the averaged profiles
+  qn_avg <- preprocessCore::normalize.quantiles(avg, keep.names = TRUE)
+  
+  # Rank and rank product of the averaged profiles
+  rank_avg <- aggtools::colrank_mat(avg)
+  rp_avg <- rowSums(log(rank_avg)) / length(genes)
+  
+  # Get binary gene measurement status (min 20 cells with at least one count)
+  is_measured <- function(mat) rowSums(mat > 0) >= 20
+  msr <- do.call(cbind, lapply(dat_l, is_measured))
+  
+  # Summary dataset of point estimates for each gene collapsed across datasets
+  
+  summ_df <- data.frame(
+    Symbol = genes,
+    Avg = rowMeans(avg, na.rm = TRUE),
+    QN_avg = rowMeans(qn_avg, na.rm = TRUE),
+    Med = rowMedians(med, na.rm = TRUE),
+    SD = rowMeans(sd, na.rm = TRUE),
+    CV = rowMeans(cv, na.rm = TRUE),
+    Avg_rank = rowMeans(rank_avg),
+    RP = rank(rp_avg),
+    N_msr = rowSums(msr)
+  )
+  
+  return(list(
+    Avg = avg,
+    QN_Avg = qn_avg,
+    Med = med,
+    SD = sd,
+    CV = cv,
+    Msr = msr,
+    Summ_df = summ_df
+  ))
 }
