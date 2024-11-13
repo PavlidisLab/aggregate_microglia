@@ -6,22 +6,16 @@ options(repos = "http://cran.rstudio.com/")
 
 
 packages <- c(
-  # "testthat",
+  "testthat",
   "parallel",
   "tidyverse",
   "BiocManager",
-  # "remotes",
   "Seurat",
-  # "umap",
+  "umap",
   "pheatmap",
-  # "RcppTOML",
-  # "igraph",
-  # "Hmisc",
   "Matrix",
-  # "patchwork",
+  "matrixStats",
   "plyr",
-  "DescTools",
-  # "googlesheets4",
   "ROCR",
   "data.table",
   "ggrepel",
@@ -41,8 +35,8 @@ if (any(installed_packages == FALSE)) {
 
 
 
-# BiocManager::install("WGCNA")
 BiocManager::install("preprocessCore")
+# BiocManager::install("WGCNA")
 # BiocManager::install("limma")
 # BiocManager::install("edgeR")
 # BiocManager::install("ComplexHeatmap")
