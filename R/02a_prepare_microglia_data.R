@@ -44,11 +44,11 @@ ct_df_dedup <- collapse_dupl_ids(ct_df)
 
 
 # Tally of annotated cell types (including from IDs with multiple cell types)
-n_ct <- count(ct_df, Cell_type) 
+n_ct <- dplyr::count(ct_df, Cell_type) 
 
 
 # Tally of species for unique/dedup IDs
-n_species <- count(ct_df_dedup, Species)
+n_species <- dplyr::count(ct_df_dedup, Species)
 
 
 
