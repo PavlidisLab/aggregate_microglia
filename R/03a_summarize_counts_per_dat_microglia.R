@@ -4,95 +4,33 @@
 library(tidyverse)
 library(aggtools)
 library(pheatmap)
-library(parallel)
-library(cluster)
 library(preprocessCore)
 library(matrixStats)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
-
-mcg_meta <- read.delim(mcg_meta_path)
+# Dataset meta and human/mouse data IDs
+mcg_meta <- read.delim(mcg_meta_dedup_path)
 ids_hg <- unique(filter(mcg_meta, Species == "Human")$ID)
 ids_mm <- unique(filter(mcg_meta, Species == "Mouse")$ID)
 
-
+# List of count matrices and their metadata
 dat_l <- readRDS(mcg_dat_path)
 
 
-mcg_meta <- distinct(mcg_meta, ID, .keep_all = TRUE)
 
-
-# Assumes dat_l contains a gene x cell CPM matrix called "Mat"
-# Assumes all matrices have the same genes and ordering
-# Returns a list of the gene x experiment point estimates, as well as a summary
-# df collapsing these summarizations across all datasets
-# Note: matrixStats requires coercing sparse count matrices to dense.
-
-summarize_count_list <- function(dat_l) {
-  
-  genes <- rownames(dat_l[[1]]$Mat)
-  stopifnot(length(genes) > 0, identical(genes, rownames(dat_l[[length(dat_l)]]$Mat)))
-
-  # Log transform all CPM matrices first
-  count_l <- lapply(dat_l, function(x) as.matrix(log2(x$Mat + 1)))  
-  
-  # Get average, median, SD, and CV of log CPM counts and bind into a matrix
-  avg <- do.call(cbind, lapply(count_l, rowMeans))
-  med <- do.call(cbind, lapply(count_l, rowMedians))
-  sd <- do.call(cbind, lapply(count_l, rowSds))
-  cv <- sd / avg
-  
-  # Quantile normalize the averaged profiles
-  qn_avg <- preprocessCore::normalize.quantiles(avg, keep.names = TRUE)
-  
-  # Rank and rank product of the averaged profiles
-  rank_avg <- aggtools::colrank_mat(avg)
-  rp_avg <- rowSums(log(rank_avg)) / length(genes)
-  
-  # Get binary gene measurement status (min 20 cells with at least one count)
-  is_measured <- function(mat) rowSums(mat > 0) >= 20
-  msr <- do.call(cbind, lapply(count_l, is_measured))
-  
-  # Summary dataset of point estimates for each gene collapsed across datasets
-
-  summ_df <- data.frame(
-    Symbol = genes,
-    Avg = rowMeans(avg, na.rm = TRUE),
-    QN_avg = rowMeans(qn_avg, na.rm = TRUE),
-    Med = rowMedians(med, na.rm = TRUE),
-    SD = rowMeans(sd, na.rm = TRUE),
-    CV = rowMeans(cv, na.rm = TRUE),
-    Avg_rank = rowMeans(rank_avg),
-    RP = rank(rp_avg),
-    N_msr = rowSums(msr)
-  )
-
-  return(list(
-    Avg = avg,
-    QN_Avg = qn_avg,
-    Med = med,
-    SD = sd,
-    CV = cv,
-    Msr = msr,
-    Summ_df = summ_df
-  ))
-}
-
-
-
-if (!file.exists(count_summ_path)) {
-  count_summ_hg <- summarize_count_list(dat_l[ids_hg])
-  count_summ_mm <- summarize_count_list(dat_l[ids_mm])
-  saveRDS(list(Human = count_summ_hg, Mouse = count_summ_mm), count_summ_path)
-  write.table(count_summ$Human$Summ_df, sep = "\t", quote = FALSE, row.names = FALSE, file = count_summ_table_hg)
-  write.table(count_summ$Mouse$Summ_df, sep = "\t", quote = FALSE, row.names = FALSE, file = count_summ_table_mm)
+if (!file.exists(mcg_count_summ_list_path)) {
+  count_summ_hg <- summarize_gene_counts(dat_l[ids_hg])
+  count_summ_mm <- summarize_gene_counts(dat_l[ids_mm])
+  saveRDS(list(Human = count_summ_hg, Mouse = count_summ_mm), mcg_count_summ_list_path)
+  write.table(count_summ_hg$Summ_df, sep = "\t", quote = FALSE, row.names = FALSE, file = mcg_count_summ_table_hg)
+  write.table(count_summ_mm$Summ_df, sep = "\t", quote = FALSE, row.names = FALSE, file = mcg_count_summ_table_mm)
 } else {
-  count_summ <- readRDS(count_summ_path)
+  count_summ <- readRDS(mcg_count_summ_list_path)
 }
 
 
-
+stop()
 
 
 
