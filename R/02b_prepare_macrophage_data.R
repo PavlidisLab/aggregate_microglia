@@ -1,4 +1,5 @@
 ## Organizing metadata and the underlying count matrices for microglia
+## https://journals.asm.org/doi/10.1128/microbiolspec.mchd-0015-2015
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
