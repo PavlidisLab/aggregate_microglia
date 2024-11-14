@@ -75,6 +75,10 @@ df_all <- filter(df_all, Symbol != check)
 
 
 
+# Note: All/Colrank is performing the filtering AFTER ranking (i.e., ranking
+# would still consider filtered genes). *_len/str is ranking after filtering.
+
+
 df_len <- data.frame(
   Symbol = genes_len, 
   N_msr = max(na) - na[genes_len, check],
@@ -106,6 +110,9 @@ cor(select_if(df_all, is.numeric), method = "spearman", use = "pairwise.complete
 plot(df_all$FZ, df_all$Allrank)
 plot(df_all$FZ, df_all$Colrank)
 plot(df_all$Colrank, df_all$Allrank)
+plot(df_all$FZ, df_all$N_msr)
+plot(df_all$Allrank, df_all$N_msr)
+plot(df_all$Colrank, df_all$N_msr)
 
 
 cor(select_if(df_len, is.numeric), method = "spearman", use = "pairwise.complete.obs")
@@ -113,6 +120,9 @@ plot(df_len$FZ, df_len$Allrank)
 plot(df_len$FZ, df_len$Allrank_len)
 plot(df_len$FZ, df_len$Colrank)
 plot(df_len$FZ, df_len$Colrank_len)
+plot(df_len$FZ, df_len$N_msr)
+plot(df_len$Allrank_len, df_len$N_msr)
+plot(df_len$Colrank_len, df_len$N_msr)
 
 
 cor(select_if(df_str, is.numeric), method = "spearman", use = "pairwise.complete.obs")
@@ -120,7 +130,9 @@ plot(df_str$FZ, df_str$Allrank)
 plot(df_str$FZ, df_str$Allrank_str)
 plot(df_str$FZ, df_str$Colrank)
 plot(df_str$FZ, df_str$Colrank_str)
-
+plot(df_str$FZ, df_str$N_msr)
+plot(df_str$Allrank_str, df_str$N_msr)
+plot(df_str$Colrank_str, df_str$N_msr)
 
 
 # Fbxl6 had the lowest Top K in the stringent gene set. Golgb1 had the highest
@@ -150,5 +162,5 @@ sum(vec1 < 0)
 sum(vec2 < 0)
 
 
-hist(vec1, breaks = 100, main = paste(check, gene1, sep = "-"), xlab = "Pcor")
-hist(vec2, breaks = 100, main = paste(check, gene2, sep = "-"), xlab = "Pcor")
+hist(vec1, breaks = 50, main = paste(check, gene1, sep = "-"), xlab = "Pcor")
+hist(vec2, breaks = 50, main = paste(check, gene2, sep = "-"), xlab = "Pcor")
