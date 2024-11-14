@@ -280,22 +280,22 @@ collapse_dupl_ids <- function(sc_meta) {
 summarize_gene_counts <- function(dat_l) {
   
   genes <- rownames(dat_l[[1]]$Mat)
-  stopifnot(length(genes) > 0, identical(genes, rownames(dat_l[[length(dat_l)]]$Mat)))
+  ids <- names(dat_l)
+  stopifnot(length(genes) > 0, length(ids) > 0) 
   
   # Log transform all CPM matrices first
   dat_l <- lapply(dat_l, function(x) as.matrix(log2(x$Mat + 1)))  
   gc(verbose = FALSE)
   
-  # Get average, median, SD, and CV of log CPM counts and bind into a matrix
+  # Get average, SD, and CV of log CPM counts and bind into a matrix
   avg <- do.call(cbind, lapply(dat_l, rowMeans))
-  med <- do.call(cbind, lapply(dat_l, rowMedians))
   sd <- do.call(cbind, lapply(dat_l, rowSds))
   cv <- sd / avg
   
   # Quantile normalize the averaged profiles
   qn_avg <- preprocessCore::normalize.quantiles(avg, keep.names = TRUE)
   
-  # Rank and rank product of the averaged profiles
+  # Rank product of the averaged profiles
   rank_avg <- aggtools::colrank_mat(avg)
   rp_avg <- rowSums(log(rank_avg)) / length(genes)
   
@@ -309,21 +309,23 @@ summarize_gene_counts <- function(dat_l) {
     Symbol = genes,
     Avg = rowMeans(avg, na.rm = TRUE),
     QN_avg = rowMeans(qn_avg, na.rm = TRUE),
-    Med = rowMedians(med, na.rm = TRUE),
     SD = rowMeans(sd, na.rm = TRUE),
     CV = rowMeans(cv, na.rm = TRUE),
-    Avg_rank = rowMeans(rank_avg),
     RP = rank(rp_avg),
     N_msr = rowSums(msr)
   )
   
+  # Genes that are measured in a minimum proportion of datasets
+  cutoff <- floor(length(ids) * (1/3))
+  filter_genes <- filter(summ_df, N_msr >= cutoff) %>% pull(Symbol)
+  
   return(list(
     Avg = avg,
     QN_Avg = qn_avg,
-    Med = med,
     SD = sd,
     CV = cv,
     Msr = msr,
-    Summ_df = summ_df
+    Summ_df = summ_df,
+    Filter_genes = filter_genes
   ))
 }
