@@ -2,6 +2,7 @@
 
 library(tidyverse)
 library(parallel)
+library(Matrix)
 source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/vector_comparison_functions.R")
@@ -23,14 +24,17 @@ cormat <- fread_to_mat("/space/scratch/amorin/aggregate_microglia/Cormats/Hg_pco
 # Only keeping measured genes/TFs
 keep_genes <- names(which(rowSums(mat > 0) >= 20))
 keep_tfs <- intersect(tf_hg$Symbol, keep_genes)
-mat <- as.matrix(mat[keep_genes, ])
+mat <- mat[keep_genes, ]
 cormat <- cormat[keep_genes, keep_tfs]
 
 
-# Save filtered count matrix
-mat_path <- "/space/scratch/amorin/R_objects/GSE180928_mcg_filt.tsv"
-if (!file.exists(mat_path)) {
-  fwrite_mat(t(mat), mat_path)
+# Save filtered count matrix as cells x genes for input to GRNBoost2
+mat_dense_path <- "/space/scratch/amorin/R_objects/GSE180928_mcg_filt.tsv"
+mat_sparse_path <- "/space/scratch/amorin/R_objects/GSE180928_mcg_filt.mtx"
+
+if (!file.exists(mat_dense_path) || !file.exists(mat_sparse_path)) {
+  fwrite_mat(t(as.matrix(mat)), mat_dense_path)
+  writeMM(t(mat), mat_sparse_path)
 }
 
 
@@ -81,20 +85,23 @@ ready_networks <- function(paths, tfs, genes, ncore) {
 }
 
 
-
-
 mat_l <- ready_networks(grn_files, keep_tfs, keep_genes, ncore)
+
+
+
+
+# Tallying how many genes were associated with each TF across the iterations
 
 n_per_tf <- bind_rows(lapply(mat_l, function(x) colSums(x > 0)))
 
-summ_n <- bind_rows(lapply(keep_tfs, function(x) {
+summ_df <- bind_rows(lapply(keep_tfs, function(x) {
   n <- n_per_tf[, x, drop = TRUE]
   data.frame(TF = x, min = min(n), median = median(n), max = max(n))
 }))
 
 
-
-ggplot(summ_n, aes(x = reorder(TF, median))) +
+# Showing the spread of the count of associated genes, with median as points
+ggplot(summ_df, aes(x = reorder(TF, median))) +
   geom_linerange(aes(ymin = min, ymax = max)) +
   geom_point(aes(x = TF, y = median, colour = "red"), shape = 21) +
   xlab("TF") +
@@ -104,12 +111,10 @@ ggplot(summ_n, aes(x = reorder(TF, median))) +
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.title = element_text(size = 20),
-        strip.text = element_text(size = 25),
         legend.position = "none")
 
-
-
-summ_n %>% 
+# Hist of the difference between the max and min count of associated genes
+summ_df %>% 
   mutate(Diff = max - min) %>% 
   ggplot(., aes(x = Diff)) +
   geom_histogram(bins = 100) +
@@ -119,6 +124,17 @@ summ_n %>%
   theme(axis.text = element_text(size = 20),
         axis.title = element_text(size = 20))
 
+
+
+# inspecting the avg expression of TFs w.r.t. associated genes
+summ_df$Avg_expr <- rowMeans(mat[keep_tfs, ])
+
+
+ggplot(summ_df, aes(x = Avg_expr, y = median)) +
+  geom_point() +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20))
 
 
 
@@ -136,17 +152,17 @@ iter_topk <- mclapply(keep_tfs, function(tf) {
 }, mc.cores = ncore)
 
 
+summ_df$Mean_topk <- unlist(iter_topk)
 
-data.frame(Topk = unlist(iter_topk)) %>% 
-  ggplot(., aes(x = Topk)) +
+
+# Hist showing the average topk overlap across iterations
+ggplot(summ_df, aes(x = Mean_topk)) +
   geom_histogram(bins = 100) +
   xlab("Mean Top30 between iterations") +
   ylab("Count TFs") +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
-        strip.text = element_text(size = 25),
-        legend.position = "none")
+        axis.title = element_text(size = 20))
 
 
 
@@ -178,7 +194,28 @@ compare_df <- data.frame(
 )
 
 
-check_tf <- "RUNX1"
+
+# Hists of the similarity between the averaged network and pcor
+ggplot(compare_df, aes(x = Top30)) +
+  geom_histogram(bins = 100) +
+  xlab("Top30 between averaged network and Pcor") +
+  ylab("Count TFs") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20))
+
+
+ggplot(compare_df, aes(x = Scor)) +
+  geom_histogram(bins = 100) +
+  xlab("Scor between averaged network and Pcor") +
+  ylab("Count TFs") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20))
+
+
+
+check_tf <- "MEF2A"
 
 check_df <- data.frame(
   Symbol = keep_genes,
@@ -202,11 +239,26 @@ topk_intersect(
 )
 
 
-plot(check_df$Pcor, check_df$GRN)
+ggplot(check_df, aes(x = Pcor, y = GRN)) +
+  geom_point(shape = 21, size = 2.2) +
+  ggtitle(check_tf) +
+  theme_classic() +
+  theme(text = element_text(size = 20))
 
 
-check_gene <- "GMPS"
-plot(mat[check_tf, ], mat[check_gene, ])
+check_gene <- "KDM2A"
+
+
+data.frame(Check_tf = mat[check_tf, ], Check_gene = mat[check_gene, ]) %>% 
+  ggplot(., aes(x = Check_tf, y = Check_gene)) +
+  geom_point(shape = 21, size = 2.2) +
+  xlab(paste(check_tf, "CPM")) +
+  ylab(paste(check_gene, "CPM")) +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+
 cor(mat[check_tf, ], mat[check_gene, ])
 cor(mat[check_tf, ], mat[check_gene, ], method = "spearman")
 
