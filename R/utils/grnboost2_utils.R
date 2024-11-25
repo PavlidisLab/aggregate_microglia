@@ -1,28 +1,34 @@
 ## Code to load and format the TF-target-importance lists produced by GRNBoost2
 
 library(parallel)
+library(data.table)
+
+
+# GRNBoost2 output saved as table of [TF, Gene, Importance_score]
+
+read_network_list <- function(path) {
+  fread(path, sep = "\t", header = FALSE, col.names = c("TF", "Gene", "Importance"))
+}
 
 
 
 # GRNBoost2 gives a list of TF-target-importance scores. Convert to a gene x TF
 # matrix of importance scores
 
-network_list_to_mat <- function(network_list, tfs, genes, ncore) {
+network_list_to_mat <- function(network_list) {
   
-  imp_vec <- setNames(rep(0, length(genes)), genes) # init importance vector
-  
-  imp_l <- mclapply(tfs, function(tf) { # extract gene scores for each TF
-    
-    tf_df <- filter(network_list, V1 == tf)
-    gene_match <- match(tf_df$V2, genes)
-    imp_vec[gene_match] <- tf_df$V3
-    imp_vec
-    
-  }, mc.cores = ncore)
-  
-  # Bind importance vectors into a matrix
-  imp_mat <- do.call(cbind, imp_l)
+  tfs <- unique(network_list$TF)
+  genes <- unique(network_list$Gene)
+  imp_mat <- matrix(0, nrow = length(genes), ncol = length(tfs))
+  rownames(imp_mat) <- genes
   colnames(imp_mat) <- tfs
+  
+  tf_ix <- match(network_list$TF, tfs)
+  gene_ix <- match(network_list$gene, genes)
+  
+  for (i in 1:nrow(network_list)) {
+    imp_mat[gene_ix[i], tf_ix[i]] <- network_list$Importance[i]
+  }
   
   return(imp_mat)
 }
@@ -31,15 +37,12 @@ network_list_to_mat <- function(network_list, tfs, genes, ncore) {
 
 # Generate a network/importance score matrix for each output network list
 
-ready_networks <- function(paths, tfs, genes, ncore) {
+ready_networks <- function(paths, ncore) {
   
-  mat_l <- lapply(paths, function(x) {
-    
-    network_list <- read.delim(x, header = FALSE)
-    if (!all(network_list$V1 %in% tfs)) stop(paste(x, "doesn't have all TFs"))
-    network_mat <- network_list_to_mat(network_list, tfs, genes, ncore)
-    
-  })
+  mat_l <- mclapply(paths, function(x) {
+    network_list <- read_network_list(x)
+    network_mat <- network_list_to_mat(network_list)
+  }, mc.cores = ncore)
   
   return(mat_l)
 }
