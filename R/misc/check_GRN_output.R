@@ -6,20 +6,22 @@ library(Matrix)
 source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/vector_comparison_functions.R")
+source("R/utils/grnboost2_utils.R")
 
 # Load genes/TFs
 tf_hg <- read.delim("/home/amorin/Data/Metadata/TFs_human.tsv")
 pc_hg <- read.delim(ref_hg_path)
 
 # Load a single count matrix
-id <- "GSE180928"
+id <- "TabulaSapiens"
 dat_l <- readRDS(mcg_dat_path)
 mat <- dat_l[[id]]$Mat
-rm(dat_l)
-gc()
+# rm(dat_l)
+# gc()
 
 # Load corresponding raw pcor mat
-cormat <- fread_to_mat("/space/scratch/amorin/aggregate_microglia/Cormats/Hg_pcor/GSE180928_cormat.tsv", genes = pc_hg$Symbol)
+cormat_path <- file.path(data_out_dir, "Cormats", "Hg_pcor", paste0(id, "_cormat.tsv"))
+cormat <- fread_to_mat(cormat_path, genes = pc_hg$Symbol)
 
 # Only keeping measured genes/TFs
 keep_genes <- names(which(rowSums(mat > 0) >= 20))
@@ -29,8 +31,8 @@ cormat <- cormat[keep_genes, keep_tfs]
 
 
 # Save filtered count matrix as cells x genes for input to GRNBoost2
-mat_dense_path <- "/space/scratch/amorin/R_objects/GSE180928_mcg_filt.tsv"
-mat_sparse_path <- "/space/scratch/amorin/R_objects/GSE180928_mcg_filt.mtx"
+mat_dense_path <- file.path(data_out_dir, "arboreto_test", paste0(id, "_mcg_filt.tsv"))
+mat_sparse_path <- file.path(data_out_dir, "arboreto_test", paste0(id, "_mcg_filt.mtx"))
 
 if (!file.exists(mat_dense_path) || !file.exists(mat_sparse_path)) {
   fwrite_mat(t(as.matrix(mat)), mat_dense_path)
@@ -39,55 +41,13 @@ if (!file.exists(mat_dense_path) || !file.exists(mat_sparse_path)) {
 
 
 # Output folder from iteratively performing GRNBoost2
-grn_dir <- "/space/scratch/amorin/R_objects/arboreto_test/"
-grn_files <- list.files(grn_dir, full.names = TRUE)
-
-
-
-# GRNBoost2 gives a list of TF-target-importance scores. Convert to a gene x TF
-# matrix of importance scores
-
-network_list_to_mat <- function(network_list, tfs, genes, ncore) {
-  
-  imp_vec <- setNames(rep(0, length(genes)), genes) # init importance vector
-  
-  imp_l <- mclapply(tfs, function(tf) { # extract gene scores for each TF
-    
-    tf_df <- filter(network_list, V1 == tf)
-    gene_match <- match(tf_df$V2, genes)
-    imp_vec[gene_match] <- tf_df$V3
-    imp_vec
-    
-  }, mc.cores = ncore)
-  
-  # Bind importance vectors into a matrix
-  imp_mat <- do.call(cbind, imp_l)
-  colnames(imp_mat) <- tfs
-  
-  return(imp_mat)
-}
-
-
-
-# Generate a network/importance score matrix for each output network list
-
-ready_networks <- function(paths, tfs, genes, ncore) {
-  
-  mat_l <- lapply(paths, function(x) {
-    
-    network_list <- read.delim(x, header = FALSE)
-    if (!all(network_list$V1 %in% tfs)) stop(paste(x, "doesn't have all TFs"))
-    network_mat <- network_list_to_mat(network_list, tfs, genes, ncore)
-
-  })
-  
-  return(mat_l)
-}
+grn_dir <- file.path(data_out_dir, "GRNBoost2", id)
+grn_files <- list.files(grn_dir, full.names = TRUE, pattern = ".*_iter.*")
 
 
 mat_l <- ready_networks(grn_files, keep_tfs, keep_genes, ncore)
 
-
+avg_grn <- average_mat_list(mat_l)
 
 
 # Tallying how many genes were associated with each TF across the iterations
@@ -215,28 +175,12 @@ ggplot(compare_df, aes(x = Scor)) +
 
 
 
-check_tf <- "MEF2A"
+check_tf <- "MEF2C"
 
 check_df <- data.frame(
   Symbol = keep_genes,
   Pcor = cormat[, check_tf], 
   GRN = avg_network[, check_tf])
-
-
-cor(check_df$Pcor, check_df$GRN, method = "spearman", use = "pairwise.complete.obs")
-cor(abs(check_df$Pcor), check_df$GRN, method = "spearman", use = "pairwise.complete.obs")
-
-
-topk_intersect(
-  slice_max(check_df, Pcor, n = k)$Symbol,
-  slice_max(check_df, GRN, n = k)$Symbol
-)
-
-
-topk_intersect(
-  slice_max(check_df, abs(Pcor), n = k)$Symbol,
-  slice_max(check_df, GRN, n = k)$Symbol
-)
 
 
 ggplot(check_df, aes(x = Pcor, y = GRN)) +
@@ -246,7 +190,7 @@ ggplot(check_df, aes(x = Pcor, y = GRN)) +
   theme(text = element_text(size = 20))
 
 
-check_gene <- "KDM2A"
+check_gene <- "PLXDC2"
 
 
 data.frame(Check_tf = mat[check_tf, ], Check_gene = mat[check_gene, ]) %>% 
@@ -256,6 +200,22 @@ data.frame(Check_tf = mat[check_tf, ], Check_gene = mat[check_gene, ]) %>%
   ylab(paste(check_gene, "CPM")) +
   theme_classic() +
   theme(text = element_text(size = 20))
+
+
+
+# cor(check_df$Pcor, check_df$GRN, method = "spearman", use = "pairwise.complete.obs")
+# cor(abs(check_df$Pcor), check_df$GRN, method = "spearman", use = "pairwise.complete.obs")
+# 
+# 
+# topk_intersect(
+#   slice_max(check_df, Pcor, n = k)$Symbol,
+#   slice_max(check_df, GRN, n = k)$Symbol
+# )
+# 
+# topk_intersect(
+#   slice_max(check_df, abs(Pcor), n = k)$Symbol,
+#   slice_max(check_df, GRN, n = k)$Symbol
+# )
 
 
 
