@@ -1,4 +1,5 @@
-## 
+## Inspect the GRNBoost2 iterations for one dataset
+## -----------------------------------------------------------------------------
 
 library(tidyverse)
 library(parallel)
@@ -13,11 +14,9 @@ tf_hg <- read.delim("/home/amorin/Data/Metadata/TFs_human.tsv")
 pc_hg <- read.delim(ref_hg_path)
 
 # Load a single count matrix
-id <- "TabulaSapiens"
+id <- "GSE180928"
 dat_l <- readRDS(mcg_dat_path)
 mat <- dat_l[[id]]$Mat
-# rm(dat_l)
-# gc()
 
 # Load corresponding raw pcor mat
 cormat_path <- file.path(data_out_dir, "Cormats", "Hg_pcor", paste0(id, "_cormat.tsv"))
@@ -30,7 +29,7 @@ mat <- mat[keep_genes, ]
 cormat <- cormat[keep_genes, keep_tfs]
 
 
-# Save filtered count matrix as cells x genes for input to GRNBoost2
+# Save filtered count matrix as cells x genes for demoing input to GRNBoost2
 mat_dense_path <- file.path(data_out_dir, "arboreto_test", paste0(id, "_mcg_filt.tsv"))
 mat_sparse_path <- file.path(data_out_dir, "arboreto_test", paste0(id, "_mcg_filt.mtx"))
 
@@ -41,13 +40,16 @@ if (!file.exists(mat_dense_path) || !file.exists(mat_sparse_path)) {
 
 
 # Output folder from iteratively performing GRNBoost2
-grn_dir <- file.path(data_out_dir, "GRNBoost2", id)
-grn_files <- list.files(grn_dir, full.names = TRUE, pattern = ".*_iter.*")
+grn_dir <- file.path(data_out_dir, "GRNBoost2")
+grn_files <- list.files(file.path(grn_dir, id), full.names = TRUE, pattern = ".*_iter.*")
 
 
-mat_l <- ready_networks(grn_files, keep_tfs, keep_genes, ncore)
+# Load each iteration into a list of matrices
+mat_l <- ready_networks(grn_files, ncore)
 
+# Average GRN over iterations
 avg_grn <- average_mat_list(mat_l)
+avg_grn <- avg_grn[keep_genes, keep_tfs]
 
 
 # Tallying how many genes were associated with each TF across the iterations
@@ -126,23 +128,19 @@ ggplot(summ_df, aes(x = Mean_topk)) +
 
 
 
-# Average network
-
-avg_network <- Reduce("+", mat_l) / length(mat_l)
-
 # Prepare comparison with raw pearson's cor mat
 
 diag(cormat[keep_tfs, keep_tfs]) <- NA
 
 
-stopifnot(identical(rownames(avg_network), rownames(cormat)),
-          identical(colnames(avg_network), colnames(cormat)))
+stopifnot(identical(rownames(avg_grn), rownames(cormat)),
+          identical(colnames(avg_grn), colnames(cormat)))
 
 
-compare_topk <- pair_colwise_topk(cormat, avg_network, k = k, ncores = ncore)
-compare_topk_abs <- pair_colwise_topk(abs(cormat), avg_network, k = k, ncores = ncore)
-compare_scor <- pair_colwise_cor(cormat, avg_network, ncores = ncore)
-compare_scor_abs <- pair_colwise_cor(abs(cormat), avg_network, ncores = ncore)
+compare_topk <- pair_colwise_topk(cormat, avg_grn, k = k, ncores = ncore)
+compare_topk_abs <- pair_colwise_topk(abs(cormat), avg_grn, k = k, ncores = ncore)
+compare_scor <- pair_colwise_cor(cormat, avg_grn, ncores = ncore)
+compare_scor_abs <- pair_colwise_cor(abs(cormat), avg_grn, ncores = ncore)
 
 
 compare_df <- data.frame(
@@ -180,7 +178,7 @@ check_tf <- "MEF2C"
 check_df <- data.frame(
   Symbol = keep_genes,
   Pcor = cormat[, check_tf], 
-  GRN = avg_network[, check_tf])
+  GRN = avg_grn[, check_tf])
 
 
 ggplot(check_df, aes(x = Pcor, y = GRN)) +
@@ -202,25 +200,5 @@ data.frame(Check_tf = mat[check_tf, ], Check_gene = mat[check_gene, ]) %>%
   theme(text = element_text(size = 20))
 
 
-
-# cor(check_df$Pcor, check_df$GRN, method = "spearman", use = "pairwise.complete.obs")
-# cor(abs(check_df$Pcor), check_df$GRN, method = "spearman", use = "pairwise.complete.obs")
-# 
-# 
-# topk_intersect(
-#   slice_max(check_df, Pcor, n = k)$Symbol,
-#   slice_max(check_df, GRN, n = k)$Symbol
-# )
-# 
-# topk_intersect(
-#   slice_max(check_df, abs(Pcor), n = k)$Symbol,
-#   slice_max(check_df, GRN, n = k)$Symbol
-# )
-
-
-
 cor(mat[check_tf, ], mat[check_gene, ])
 cor(mat[check_tf, ], mat[check_gene, ], method = "spearman")
-
-
-# check warning produced for "GTCTCGTTCGTATCAG-1-5382" 
