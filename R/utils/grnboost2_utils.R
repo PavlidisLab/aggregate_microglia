@@ -61,7 +61,7 @@ average_mat_list <- function(mat_l)  Reduce("+", mat_l) / length(mat_l)
 
 
 
-# TODO:
+# Use fread:: to load .tsv into matrix, making the first column into rownames
 # TODO: consider if necessary or can be made general with functions.R fread
 
 fread_mat <- function(path) {
@@ -77,7 +77,7 @@ fread_mat <- function(path) {
 
 
 
-# TODO
+# For each dataset ID, average the GRNBoost2 iterations into one matrix
 # TODO: consider if load logic can be used with fread_to_mat()
 # TODO: n_iter is pretty hacky, consider replacing when all is ran
 
@@ -111,3 +111,31 @@ average_and_save_each_network <- function(ids,
   return(avg_grn_l)
 }
 
+
+
+# Compile all averaged GRNBoost2 networks into one global average matrix
+
+average_all_networks <- function(avg_grn_l) {
+  
+  all_tfs <- Reduce(union, lapply(avg_grn_l, colnames))
+  all_genes <- Reduce(union, lapply(avg_grn_l, rownames))
+  
+  # Init matrix that tracks all encountered genes/TFs
+  track_avg_mat <- matrix(0, nrow = length(all_genes), ncol = length(all_tfs))
+  rownames(track_avg_mat) <- all_genes
+  colnames(track_avg_mat) <- all_tfs
+  
+  # Make each matrix have equal dimensions/ordering
+  avg_grn_l <- lapply(avg_grn_l, function(x) {
+    
+    tf_ix <- match(colnames(x), all_tfs)
+    gene_ix <- match(rownames(x), all_genes)
+    track_avg_mat[gene_ix, tf_ix] <- x
+    track_avg_mat
+    
+  })
+  
+  all_avg_mat <- average_mat_list(avg_grn_l)
+  
+  return(all_avg_mat)
+}
