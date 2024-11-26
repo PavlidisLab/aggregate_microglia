@@ -19,12 +19,13 @@ network_list_to_mat <- function(network_list) {
   
   tfs <- unique(network_list$TF)
   genes <- unique(network_list$Gene)
+  
   imp_mat <- matrix(0, nrow = length(genes), ncol = length(tfs))
   rownames(imp_mat) <- genes
   colnames(imp_mat) <- tfs
   
   tf_ix <- match(network_list$TF, tfs)
-  gene_ix <- match(network_list$gene, genes)
+  gene_ix <- match(network_list$Gene, genes)
   
   for (i in 1:nrow(network_list)) {
     imp_mat[gene_ix[i], tf_ix[i]] <- network_list$Importance[i]
