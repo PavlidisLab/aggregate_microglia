@@ -6,7 +6,7 @@ import utils
 import rds2py
 
 
-n_workers=20  # How many workers for dask client
+n_workers=40  # How many workers for dask client
 n_iter=100  # How many times to run GRNBoost2
 
 mcg_dat_path = "/space/scratch/amorin/aggregate_microglia/microglia_dat_list.RDS"
