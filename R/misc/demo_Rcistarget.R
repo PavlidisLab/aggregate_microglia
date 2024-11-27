@@ -33,12 +33,11 @@ mcg_rank_mm <- readRDS(file.path(cmat_dir_mm, "aggregate_cormat_FZ_mm.RDS"))
 rcistarget_over_tf_list <- function(rank_list,
                                     motif_rank,
                                     motif_anno,
-                                    n = 200,
-                                    ncore) {
+                                    n = 200) {
   
   tfs <- names(rank_list)
   
-  res_l <- mclapply(tfs, function(tf) {
+  res_l <- lapply(tfs, function(tf) {
     
     coexpr_genes <- slice_min(rank_list[[tf]], Rank_aggr_coexpr, n = n)$Symbol
     bind_genes <- slice_min(rank_list[[tf]], Rank_bind, n = n)$Symbol
@@ -53,7 +52,7 @@ rcistarget_over_tf_list <- function(rank_list,
     
     list(Coexpr = res_coexpr, Bind = res_bind)
     
-  }, mc.cores = ncore)
+  })
   names(res_l) <- tfs
   
   return(res_l)
@@ -67,8 +66,7 @@ rcistarget_over_mat <- function(mat,
                                 tfs,
                                 motif_rank, 
                                 motif_anno,
-                                n = 200,
-                                ncore) {
+                                n = 200) {
   
   res_l <- mclapply(tfs, function(tf) {
     
@@ -91,7 +89,7 @@ rcistarget_over_mat <- function(mat,
     
     list(Pos_coexpr = res_pos, Neg_coexpr = res_neg)
     
-  }, mc.cores = ncore)
+  })
   names(res_l) <- tfs
   
   return(res_l)
@@ -99,10 +97,10 @@ rcistarget_over_mat <- function(mat,
 
 
 
-rcistarget_tfrank_hg_path <-  "/space/scratch/amorin/R_objects/Rcistarget_tfrank_hg.RDS" 
-rcistarget_tfrank_mm_path <-  "/space/scratch/amorin/R_objects/Rcistarget_tfrank_mm.RDS" 
-rcistarget_mcgtf_hg_path <-  "/space/scratch/amorin/R_objects/Rcistarget_mcgtf_hg.RDS" 
-rcistarget_mcgtf_mm_path <-  "/space/scratch/amorin/R_objects/Rcistarget_mcgtf_mm.RDS" 
+rcistarget_tfrank_hg_path <- "/space/scratch/amorin/R_objects/Rcistarget_tfrank_hg.RDS" 
+rcistarget_tfrank_mm_path <- "/space/scratch/amorin/R_objects/Rcistarget_tfrank_mm.RDS" 
+rcistarget_mcgtf_hg_path <- "/space/scratch/amorin/R_objects/Rcistarget_mcgtf_hg.RDS" 
+rcistarget_mcgtf_mm_path <- "/space/scratch/amorin/R_objects/Rcistarget_mcgtf_mm.RDS" 
 
 
 # Human TF rank
@@ -113,8 +111,7 @@ save_function_results(
     rank_list = tf_rank_hg,
     motif_rank = motif_rank_hg, 
     motif_anno = motif_anno_hg,
-    n = 200,
-    ncore = ncore)
+    n = 200)
 )
 
 
@@ -126,8 +123,7 @@ save_function_results(
     rank_list = tf_rank_mm,
     motif_rank = motif_rank_mm, 
     motif_anno = motif_anno_mm,
-    n = 200,
-    ncore = ncore)
+    n = 200)
 )
 
 
@@ -140,8 +136,7 @@ save_function_results(
     tfs = tfs_hg$Symbol,
     motif_rank = motif_rank_hg, 
     motif_anno = motif_anno_hg,
-    n = 200,
-    ncore = ncore)
+    n = 200)
 )
 
 
@@ -155,14 +150,37 @@ save_function_results(
     tfs = tfs_mm$Symbol,
     motif_rank = motif_rank_mm, 
     motif_anno = motif_anno_mm,
-    n = 200,
-    ncore = ncore)
+    n = 200)
 )
 
 
 
-# str_detect(res_coexpr$TF_highConf, tf)
-# str_detect(res_coexpr$TF_lowConf, tf)
+rcistarget_tfrank_hg <- readRDS(rcistarget_tfrank_hg_path)
+rcistarget_tfrank_mm <- readRDS(rcistarget_tfrank_mm_path)
+rcistarget_mcgtf_hg <- readRDS(rcistarget_mcgtf_hg_path) 
+rcistarget_mcgtf_mm <- readRDS(rcistarget_mcgtf_mm_path)
+
+
+
+
+rcistarget_tfrank_hg <- rcistarget_over_tf_list(
+  rank_list = tf_rank_hg[1:5],
+  motif_rank = motif_rank_hg, 
+  motif_anno = motif_anno_hg,
+  n = 200)
+
+
+
+tt1 <- lapply(names(rcistarget_tfrank_hg), function(tf) {
+  
+  c(High = any(str_detect(rcistarget_tfrank_hg[[tf]]$TF_highConf, tf)),
+    Low = any(str_detect(rcistarget_tfrank_hg[[tf]]$TF_lowConf, tf)))
+  
+})
+
+
+
+sum(sapply(rcistarget_mcgtf_mm, class) == "try-error")
 
 
 # Inspecting top TF/motifs for a given gene
