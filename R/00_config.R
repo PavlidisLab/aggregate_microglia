@@ -39,8 +39,8 @@ amat_dir <- "/space/scratch/amorin/TR_singlecell"
 celltype_list_path <- "/space/scratch/amorin/R_objects/celltype_list.RDS"
 
 # ENSEMBL and Refseq Select protein coding paths
-ref_hg_path <- "/space/grp/amorin/Metadata/refseq_select_hg38.tsv"
-ref_mm_path <- "/space/grp/amorin/Metadata/refseq_select_mm10.tsv"
+ref_hg_path <- "/space/grp/amorin/Metadata/refseq_select_hg38_jan2024.tsv"
+ref_mm_path <- "/space/grp/amorin/Metadata/refseq_select_mm10_jan2024.tsv"
 ens_hg_path <- "/space/grp/amorin/Metadata/ensembl_human_protein_coding_105.tsv"
 ens_mm_path <- "/space/grp/amorin/Metadata/ensembl_mouse_protein_coding_105.tsv"
 
