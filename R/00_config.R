@@ -32,6 +32,10 @@ if (!dir.exists(cmat_dir_mm)) dir.create(cmat_dir_mm)
 # TRsc metadata
 sc_meta_path <- "/space/grp/amorin/Metadata/single_cell_dataset_meta.tsv"
 
+# Directory of initial objects to process scRNA-seq data
+sc_dir <- "/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/amorin_sc_datasets"
+
+
 # Location of aggregate coexpression matrices
 amat_dir <- "/space/scratch/amorin/TR_singlecell"
 
