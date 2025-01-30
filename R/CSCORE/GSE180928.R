@@ -44,13 +44,9 @@ if (!file.exists(outfile)) {
   mat <- rm_low_qc_cells(mat, count_meta) %>% get_pcoding_only(pcoding_df = pc)
   count_meta <- filter(count_meta, ID %in% colnames(mat))
 
-  # Keep only microglia cells with minimum detection in at least 20 cells
+  # Subset to microglia cells
   mcg_count_meta <- count_meta %>% filter(Cell_type %in% ct)
   mcg_ids <- mcg_count_meta$ID
-
-  if (length(mcg_ids) <= 20) {
-    stop("Too few microglia cells")
-  }
   mcg_mat <- mat[, mcg_ids]
   
   # Keeping genes detected in at least 20 cells. Arb. threshold for min genes
