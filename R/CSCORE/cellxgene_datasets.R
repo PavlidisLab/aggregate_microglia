@@ -45,8 +45,8 @@ if (!file.exists(outfile)) {
   
   # Convert Ensembl IDs to symbols... need to extract count matrix and rebuild
   counts <- suppressWarnings(dat@assays$RNA$counts)
-  
-  if (length(counts) == 0) {
+
+  if (length(counts) == 0 || sum(counts == 0)) {
     counts <- dat@assays$RNA$data
     stopifnot(is.integer(counts@i))
   }
