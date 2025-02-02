@@ -48,6 +48,11 @@ ref_mm_path <- "/space/grp/amorin/Metadata/refseq_select_mm10_jan2024.tsv"
 ens_hg_path <- "/space/grp/amorin/Metadata/ensembl_human_protein_coding_105.tsv"
 ens_mm_path <- "/space/grp/amorin/Metadata/ensembl_mouse_protein_coding_105.tsv"
 
+# AnimalTFDB paths for TF genes
+tfs_hg_path <-  "/space/grp/amorin/Metadata/AnimalTFDB_human_V4.tsv"
+tfs_mm_path <-  "/space/grp/amorin/Metadata/AnimalTFDB_mouse_V4.tsv"
+
+
 ## ---
 
 
