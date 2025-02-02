@@ -107,26 +107,25 @@ summ_hg <- readRDS(outfile_hg)
 summ_mm <- readRDS(outfile_mm)
 
 
-stop()
 
 ##
 
 
 
 summ_df_hg <- cbind(
-  mat_to_df(l_hg$Avg_mat, value_name = "Avg"),
-  SD = mat_to_df(l_hg$SD_mat, value_name = "SD")[["SD"]],
-  CV =  mat_to_df(l_hg$CV_mat, value_name = "CV")[["CV"]],
-  N_msr = mat_to_df(l_hg$Msr_mat, value_name = "N_msr")[["N_msr"]]
+  mat_to_df(summ_hg$Avg_mat, value_name = "Avg"),
+  SD = mat_to_df(summ_hg$SD_mat, value_name = "SD")[["SD"]],
+  CV =  mat_to_df(summ_hg$CV_mat, value_name = "CV")[["CV"]],
+  N_msr = mat_to_df(summ_hg$Msr_mat, value_name = "N_msr")[["N_msr"]]
 ) %>%
   arrange(desc(Avg))
 
 
 summ_df_mm <- cbind(
-  mat_to_df(l_mm$Avg_mat, value_name = "Avg"),
-  SD = mat_to_df(l_mm$SD_mat, value_name = "SD")[["SD"]],
-  CV =  mat_to_df(l_mm$CV_mat, value_name = "CV")[["CV"]],
-  N_msr = mat_to_df(l_mm$Msr_mat, value_name = "N_msr")[["N_msr"]]
+  mat_to_df(summ_mm$Avg_mat, value_name = "Avg"),
+  SD = mat_to_df(summ_mm$SD_mat, value_name = "SD")[["SD"]],
+  CV =  mat_to_df(summ_mm$CV_mat, value_name = "CV")[["CV"]],
+  N_msr = mat_to_df(summ_mm$Msr_mat, value_name = "N_msr")[["N_msr"]]
 ) %>%
   arrange(desc(Avg))
 
