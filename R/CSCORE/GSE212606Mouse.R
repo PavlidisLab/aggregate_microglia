@@ -1,44 +1,62 @@
-## Process count matrix and get aggregate correlation for GSE180928
+## GSE212606Mouse
 ## -----------------------------------------------------------------------------
 
 library(CSCORE)
-library(Seurat)
 library(tidyverse)
 library(data.table)
+library(Seurat)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
-id <- "GSE180928"
+id <- "GSE212606Mouse"
+species <- "Mouse"
 
-sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/alex_sc_requests/human/has_celltype_metadata", id)
-dat_path <- file.path(sc_dir, paste0(id, "_filtered_cell_counts.csv"))
-meta_path <- file.path(sc_dir, paste0(id, "_metadata.csv"))
-outfile <- file.path(data_out_dir, "CSCORE", paste0(id, "_CSCORE.RDS"))
+dat_dir <- file.path(sc_dir, id)
+if (!dir.exists(dat_dir)) dir.create(dat_dir)
 mcg_dat_meta <- read.delim(mcg_meta_dedup_path, stringsAsFactors = FALSE)
+
 ct <- mcg_dat_meta %>% filter(ID == id) %>% pull(Cell_type)
-pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
+
+outfile <- file.path(data_out_dir, "CSCORE", paste0(id, "_CSCORE.RDS"))
+
+
+pc <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
+
+
+# Files were directly downloaded from GEO, see GSE212606Mouse_download.sh in dat_dir
+dat_path <- file.path(dat_dir, "GSM6538356_RNA_gene_count.txt")
+features_path <- file.path(dat_dir, "GSM6538356_RNA_gene_annotation.csv")
+meta_path <- file.path(dat_dir, "GSM6538356_RNA_cell_annotation.csv")
 
 
 
 if (!file.exists(outfile)) {
   
-  meta <- read.delim(meta_path, sep = ",")
+  # Load metadata and the count matrix
   
-  mat <- read_count_mat(dat_path)
-  colnames(mat) <- str_replace_all(colnames(mat), "\\.", "-")
-  mat <- mat[, meta$X]
+  meta <- read.csv(meta_path)
+  features <- read.csv(features_path)
+  mat <- Matrix::readMM(dat_path)
+
+  colnames(mat) <- meta$sample
+  rownames(mat) <- features$gene_short_name
   
-  stopifnot(identical(colnames(mat), meta$X))
+  stopifnot(identical(colnames(mat), meta$sample))
   
-  
+
   # Ready metadata
+  # "GSE212606Mouse" collapse cell types with integer IDs
   
-  change_colnames <- c(Cell_type = "Lineage", ID = "X")
+  change_colnames <- c(Cell_type = "Main_cluster_name", ID = "sample")
   
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
-    mutate(assay = "10x 3' v2/v3") %>% 
+    mutate(
+      assay = "EasySci-RNA",
+      Cell_type = str_replace(Cell_type, " [:digit:]$", "")
+      ) %>% 
     add_count_info(mat = mat)
+  
   
   # Remove cells failing QC and keep only protein coding genes
   mat <- rm_low_qc_cells(mat, meta) %>% get_pcoding_only(pcoding_df = pc)

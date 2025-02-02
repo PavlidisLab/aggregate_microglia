@@ -1,45 +1,45 @@
-## Process count matrix and get aggregate correlation for GSE180928
+## GSE180928
 ## -----------------------------------------------------------------------------
 
-library(CSCORE)
-library(Seurat)
 library(tidyverse)
 library(data.table)
+library(Seurat)
+library(CSCORE)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
 id <- "GSE180928"
+mcg_dat_meta <- read.delim(mcg_meta_dedup_path, stringsAsFactors = FALSE)
+ct <- mcg_dat_meta %>% filter(ID == id) %>% pull(Cell_type)
 
+# Input count/meta and output CSCORE paths
 sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/alex_sc_requests/human/has_celltype_metadata", id)
 dat_path <- file.path(sc_dir, paste0(id, "_filtered_cell_counts.csv"))
 meta_path <- file.path(sc_dir, paste0(id, "_metadata.csv"))
 outfile <- file.path(data_out_dir, "CSCORE", paste0(id, "_CSCORE.RDS"))
-mcg_dat_meta <- read.delim(mcg_meta_dedup_path, stringsAsFactors = FALSE)
-ct <- mcg_dat_meta %>% filter(ID == id) %>% pull(Cell_type)
+
+# Protein coding genes
 pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
 
-
-
+# Get microglia raw count matrix and run CSCORE
 if (!file.exists(outfile)) {
   
+  # Read meta and count matrix and match IDs
   meta <- read.delim(meta_path, sep = ",")
-  
   mat <- read_count_mat(dat_path)
   colnames(mat) <- str_replace_all(colnames(mat), "\\.", "-")
   mat <- mat[, meta$X]
-  
+
   stopifnot(identical(colnames(mat), meta$X))
-  
-  
+
   # Ready metadata
-  
   change_colnames <- c(Cell_type = "Lineage", ID = "X")
   
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
     mutate(assay = "10x 3' v2/v3") %>% 
     add_count_info(mat = mat)
-  
+
   # Remove cells failing QC and keep only protein coding genes
   mat <- rm_low_qc_cells(mat, meta) %>% get_pcoding_only(pcoding_df = pc)
   meta <- filter(meta, ID %in% colnames(mat))
@@ -67,4 +67,3 @@ if (!file.exists(outfile)) {
   saveRDS(res, outfile)
 
 }
-  

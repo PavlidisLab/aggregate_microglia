@@ -1,44 +1,57 @@
-## Process count matrix and get aggregate correlation for GSE180928
+## GSE121891
 ## -----------------------------------------------------------------------------
 
 library(CSCORE)
-library(Seurat)
 library(tidyverse)
+library(Seurat)
 library(data.table)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
-id <- "GSE180928"
+id <- "GSE121891"
+species <- "Mouse"
 
-sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/alex_sc_requests/human/has_celltype_metadata", id)
-dat_path <- file.path(sc_dir, paste0(id, "_filtered_cell_counts.csv"))
-meta_path <- file.path(sc_dir, paste0(id, "_metadata.csv"))
-outfile <- file.path(data_out_dir, "CSCORE", paste0(id, "_CSCORE.RDS"))
+dat_dir <- file.path(sc_dir, id)
+if (!dir.exists(dat_dir)) dir.create(dat_dir)
 mcg_dat_meta <- read.delim(mcg_meta_dedup_path, stringsAsFactors = FALSE)
+
 ct <- mcg_dat_meta %>% filter(ID == id) %>% pull(Cell_type)
-pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
+
+outfile <- file.path(data_out_dir, "CSCORE", paste0(id, "_CSCORE.RDS"))
+
+
+pc <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
+
+
+# Files were directly downloaded from GEO, see GSE121891_download.sh in dat_dir
+dat_path <- file.path(dat_dir, paste0(id, "_counts.csv"))
+meta_path <- file.path(dat_dir, paste0(id, "_metadata.csv"))
 
 
 
 if (!file.exists(outfile)) {
   
-  meta <- read.delim(meta_path, sep = ",")
+  # Load metadata and the count matrix
   
+  meta <- as.data.frame(fread(meta_path))
   mat <- read_count_mat(dat_path)
-  colnames(mat) <- str_replace_all(colnames(mat), "\\.", "-")
-  mat <- mat[, meta$X]
+  mat <- mat[, meta$V1]
   
-  stopifnot(identical(colnames(mat), meta$X))
+  stopifnot(identical(colnames(mat), meta$V1))
   
   
   # Ready metadata
+  # "GSE121891" collapse cell types
   
-  change_colnames <- c(Cell_type = "Lineage", ID = "X")
+  change_colnames <- c(Cell_type = "ClusterName", ID = "V1")
   
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
-    mutate(assay = "10x 3' v2/v3") %>% 
+    mutate(
+      assay = "10x 3' v2",
+      Cell_type = str_replace(Cell_type, "[:digit:]+$", "")) %>% 
     add_count_info(mat = mat)
+  
   
   # Remove cells failing QC and keep only protein coding genes
   mat <- rm_low_qc_cells(mat, meta) %>% get_pcoding_only(pcoding_df = pc)
@@ -67,4 +80,3 @@ if (!file.exists(outfile)) {
   saveRDS(res, outfile)
 
 }
-  

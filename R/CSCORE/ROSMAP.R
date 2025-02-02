@@ -1,47 +1,44 @@
-## Process count matrix and get aggregate correlation for GSE180928
+## Process count matrix and get aggregate correlation for ROSMAP
 ## -----------------------------------------------------------------------------
 
 library(CSCORE)
-library(Seurat)
 library(tidyverse)
-library(data.table)
+library(Seurat)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
-id <- "GSE180928"
-
-sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/alex_sc_requests/human/has_celltype_metadata", id)
-dat_path <- file.path(sc_dir, paste0(id, "_filtered_cell_counts.csv"))
-meta_path <- file.path(sc_dir, paste0(id, "_metadata.csv"))
+id <- "ROSMAP"
+sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/jules_garreau_sc_datasets/", id)
+dat_path <- file.path(sc_dir, "sc_exprmats_rosmap.rds")
 outfile <- file.path(data_out_dir, "CSCORE", paste0(id, "_CSCORE.RDS"))
 mcg_dat_meta <- read.delim(mcg_meta_dedup_path, stringsAsFactors = FALSE)
 ct <- mcg_dat_meta %>% filter(ID == id) %>% pull(Cell_type)
-pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
+
+pc <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 
 
 
 if (!file.exists(outfile)) {
   
-  meta <- read.delim(meta_path, sep = ",")
+  dat <- readRDS(dat_path)
   
-  mat <- read_count_mat(dat_path)
-  colnames(mat) <- str_replace_all(colnames(mat), "\\.", "-")
-  mat <- mat[, meta$X]
-  
-  stopifnot(identical(colnames(mat), meta$X))
+  mat <- dat$raw$ctmat
   
   
   # Ready metadata
   
-  change_colnames <- c(Cell_type = "Lineage", ID = "X")
+  change_colnames <- c(Cell_type = "cell_type", ID = "sample")
   
-  meta <- meta %>% 
+  meta <- dat$raw$samples %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
-    mutate(assay = "10x 3' v2/v3") %>% 
+    mutate(assay = "10x 3' v2") %>% 
     add_count_info(mat = mat)
   
   # Remove cells failing QC and keep only protein coding genes
-  mat <- rm_low_qc_cells(mat, meta) %>% get_pcoding_only(pcoding_df = pc)
+  mat <- rm_low_qc_cells(mat, meta) %>% 
+    ensembl_to_symbol(ensembl_df = pc) %>% 
+    get_pcoding_only(pcoding_df = pc)
+  
   meta <- filter(meta, ID %in% colnames(mat))
 
   # Subset to microglia cells

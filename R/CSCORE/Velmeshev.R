@@ -1,43 +1,44 @@
-## Process count matrix and get aggregate correlation for GSE180928
+## Process count matrix and get aggregate correlation for Velmeshev 2019
 ## -----------------------------------------------------------------------------
 
 library(CSCORE)
-library(Seurat)
 library(tidyverse)
-library(data.table)
+library(Seurat)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
-id <- "GSE180928"
-
-sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/alex_sc_requests/human/has_celltype_metadata", id)
-dat_path <- file.path(sc_dir, paste0(id, "_filtered_cell_counts.csv"))
-meta_path <- file.path(sc_dir, paste0(id, "_metadata.csv"))
+id <- "Velmeshev"
+sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/jules_garreau_sc_datasets/", id)
+dat_path <- file.path(sc_dir, "matrix.mtx")
+meta_path <- file.path(sc_dir, "meta.txt")
+genes_path <- file.path(sc_dir, "genes.tsv")
 outfile <- file.path(data_out_dir, "CSCORE", paste0(id, "_CSCORE.RDS"))
 mcg_dat_meta <- read.delim(mcg_meta_dedup_path, stringsAsFactors = FALSE)
 ct <- mcg_dat_meta %>% filter(ID == id) %>% pull(Cell_type)
+
 pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
 
 
 
 if (!file.exists(outfile)) {
   
-  meta <- read.delim(meta_path, sep = ",")
+  # Count matrix, metadata, and genes need to be loaded individually
   
-  mat <- read_count_mat(dat_path)
-  colnames(mat) <- str_replace_all(colnames(mat), "\\.", "-")
-  mat <- mat[, meta$X]
+  mat <- Matrix::readMM(dat_path)
+  meta <- read.delim(meta_path, stringsAsFactors = FALSE)
+  genes <- read.delim(genes_path, header = FALSE, stringsAsFactors = FALSE)
   
-  stopifnot(identical(colnames(mat), meta$X))
+  colnames(mat) <- meta$cell
+  rownames(mat) <- genes$V2
   
   
   # Ready metadata
   
-  change_colnames <- c(Cell_type = "Lineage", ID = "X")
+  change_colnames <- c(Cell_type = "cluster", ID = "cell")
   
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
-    mutate(assay = "10x 3' v2/v3") %>% 
+    mutate(assay = "10x 3' v1") %>% 
     add_count_info(mat = mat)
   
   # Remove cells failing QC and keep only protein coding genes

@@ -1,44 +1,52 @@
-## Process count matrix and get aggregate correlation for GSE180928
+## GSE195445Human
 ## -----------------------------------------------------------------------------
 
 library(CSCORE)
-library(Seurat)
 library(tidyverse)
 library(data.table)
+library(Seurat)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
-id <- "GSE180928"
+id <- "GSE195445Human"
+species <- "Human"
 
-sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/alex_sc_requests/human/has_celltype_metadata", id)
-dat_path <- file.path(sc_dir, paste0(id, "_filtered_cell_counts.csv"))
-meta_path <- file.path(sc_dir, paste0(id, "_metadata.csv"))
-outfile <- file.path(data_out_dir, "CSCORE", paste0(id, "_CSCORE.RDS"))
+dat_dir <- file.path(sc_dir, id)
+if (!dir.exists(dat_dir)) dir.create(dat_dir)
 mcg_dat_meta <- read.delim(mcg_meta_dedup_path, stringsAsFactors = FALSE)
+
 ct <- mcg_dat_meta %>% filter(ID == id) %>% pull(Cell_type)
+
+outfile <- file.path(data_out_dir, "CSCORE", paste0(id, "_CSCORE.RDS"))
+
 pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
+
+# Files were directly downloaded from GEO, see GSE195445Human_download.sh in dat_dir
+dat_path <- file.path(dat_dir, paste0(id, "_seurat.RDS"))
 
 
 
 if (!file.exists(outfile)) {
   
-  meta <- read.delim(meta_path, sep = ",")
+  # Load seurat object
   
-  mat <- read_count_mat(dat_path)
-  colnames(mat) <- str_replace_all(colnames(mat), "\\.", "-")
-  mat <- mat[, meta$X]
+  dat <- readRDS(dat_path)
   
-  stopifnot(identical(colnames(mat), meta$X))
+  # "GSE195445Human" counts show signs of already being norm, so use data slot
+  
+  mat <- GetAssayData(dat, slot = "data")
   
   
   # Ready metadata
   
-  change_colnames <- c(Cell_type = "Lineage", ID = "X")
+  change_colnames <- c(Cell_type = "celltype")
   
-  meta <- meta %>% 
+  meta <- dat[[]] %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
-    mutate(assay = "10x 3' v2/v3") %>% 
+    mutate(assay = "10x 3' v3") %>% 
+    rownames_to_column(var = "ID") %>% 
     add_count_info(mat = mat)
+  
   
   # Remove cells failing QC and keep only protein coding genes
   mat <- rm_low_qc_cells(mat, meta) %>% get_pcoding_only(pcoding_df = pc)
