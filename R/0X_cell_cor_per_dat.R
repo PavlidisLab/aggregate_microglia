@@ -6,21 +6,8 @@ library(aggtools)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
-mcg_meta <- read.delim(mcg_meta_path)
+mcg_meta <- read.delim(mcg_meta_dedup_path)
 dat_l <- readRDS(mcg_dat_path)
-
-
-# Collapsing cell type counts for the same ID
-mcg_counts <- mcg_meta %>% 
-  group_by(ID) %>% 
-  summarise(N_cells = sum(N_cells)) 
-
-
-mcg_meta <- mcg_meta %>%
-  distinct(ID, .keep_all = TRUE) %>% 
-  dplyr::select(-N_cells) %>% 
-  left_join(., mcg_counts, by = "ID") %>% 
-  arrange(N_cells)
 
 
 # Note that I inspected taking cor after filtering away 0 genes, but saw
