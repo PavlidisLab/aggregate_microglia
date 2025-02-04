@@ -77,9 +77,13 @@ p1 <- ggplot(ct_df_dedup, aes(x = log10(N_cells), fill = Species)) +
         plot.title = element_text(size = 20),
         legend.text = element_text(size = 15),
         legend.title = element_text(size = 15),
-        legend.position = c(0.9, 0.5),
+        legend.position = c(0.9, 0.8),
         plot.margin = margin(c(10, 20, 10, 10)))
 
+
+
+ggsave(p1, width = 6, height = 4.5, dpi = 300, device = "png",
+       filename = file.path(plot_dir, "microglia_cell_counts.png"))
 
 
 p2 <- ggplot(ct_df_dedup, 
@@ -99,6 +103,8 @@ p2 <- ggplot(ct_df_dedup,
         plot.margin = margin(c(10, 20, 10, 10)))
 
 
+ggsave(p2, width = 8, height = 8, dpi = 300, device = "png",
+       filename = file.path(plot_dir, "microglia_count_measured.png"))
 
 
 p3 <- ggplot(ct_df_dedup, aes(x = log10(Median_UMI), fill = Species)) +
@@ -115,3 +121,7 @@ p3 <- ggplot(ct_df_dedup, aes(x = log10(Median_UMI), fill = Species)) +
         legend.title = element_text(size = 15),
         legend.position = c(0.9, 0.5),
         plot.margin = margin(c(10, 20, 10, 10)))
+
+
+ggsave(p3, width = 6, height = 4.5, dpi = 300, device = "png",
+       filename = file.path(plot_dir, "microglia_UMI_counts.png"))
