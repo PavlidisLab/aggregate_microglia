@@ -5,6 +5,7 @@ library(tidyverse)
 library(data.table)
 library(aggtools)
 library(ggrepel)
+library(parallel)
 source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/vector_comparison_functions.R")
@@ -127,11 +128,27 @@ colwise_summary <- function(mat) {
 }
 
 
+# Get matrix for dividing each agg element by its count measured
+
+count_msr <- function(na_mat_l) {
+  
+  na_mat <- Reduce("+", na_mat_l)
+  msr_mat <- length(na_mat_l) - na_mat
+  
+  return(msr_mat)
+}
+
+
+
+# Running
+# ------------------------------------------------------------------------------
+
 
 # Ready aggregate used for comparison
 keep_mm <- count_summ$Mouse$Filter_genes
 keep_tfs_mm <- intersect(keep_mm, tfs_mm$Symbol)
-agg_mat <- agg_mm$Agg_mat[keep_mm, keep_tfs_mm]
+agg_mat_mm <- agg_mm$Agg_mat[keep_mm, keep_tfs_mm]
+msr_mm <- count_summ$Mouse$Summ_df
 
 
 # Load and ready all correlation matrices
@@ -145,11 +162,17 @@ cmat_l <- load_mat_to_list(ids = ids_mm,
 cmat_l <- lapply(cmat_l, ready_cmat, keep_mm, keep_tfs_mm)
 
 
+# Tracking NA/0 status for dividing aggregate by measured elements
+na_mat_l <- lapply(cmat_l, function(x) {
+  x <- x[keep_mm, keep_tfs_mm]
+  x == 0
+})
+
 
 # TopK overlap of each individual dataset with the global
 ind_topk_l <- lapply(cmat_l, function(mat) {
   pair_colwise_topk(mat1 = mat,
-                    mat2 = agg_mat,
+                    mat2 = agg_mat_mm,
                     k = k,
                     ncores = ncore)
 })
@@ -159,22 +182,23 @@ ind_topk_l <- lapply(cmat_l, function(mat) {
 ind_topk_mat <- do.call(cbind, ind_topk_l)
  
 
+# TODO: function
 
-# TODO: need to account for NA when dividing if want to be consistent with FZ agg
-
-steps <- 2:(length(ids_mm)-1)
+steps <- 2:(length(ids_mm) - 1)
 
 
-step_l <- lapply(steps, function(step) {
+
+step_l <- mclapply(steps, function(step) {
   
   message(paste("Step ==", step, Sys.time()))
   
   iter_l <- lapply(1:n_iter, function(iter) {
     
     sample_ids <- sample(ids_mm, size = step, replace = FALSE)
-    avg_sample <- Reduce("+", cmat_l[sample_ids]) / length(sample_ids)
-    pair_colwise_topk(mat1 = avg_sample, mat2 = agg_mat, k = k, ncores = ncore)
-    
+    msr_mat <- count_msr(na_mat_l[sample_ids])  # count of msr'd among samples
+    avg_sample <- Reduce("+", cmat_l[sample_ids]) / msr_mat
+    pair_colwise_topk(mat1 = avg_sample, mat2 = agg_mat_mm, k = k, ncores = 1)
+
   })
   
   iter_mat <- do.call(rbind, iter_l)
@@ -182,7 +206,7 @@ step_l <- lapply(steps, function(step) {
 
   return(iter_summ)
   
-})
+}, mc.cores = ncore)
 
 
 
@@ -190,11 +214,75 @@ saveRDS(ind_topk_mat, ind_topk_path)
 saveRDS(step_l, saturation_path)
 
 
+stop()
+
+
 ind_topk_mat <- readRDS(ind_topk_path)
 step_l <- readRDS(saturation_path)
 
 
+# Summarize 
+# ------------------------------------------------------------------------------
 
+
+# Datasets that most resemble the global profiles
+
+
+rank_topk <- t(colrank_mat(t(-ind_topk_mat)))
+rank_topk <- rank_topk / max(rank_topk)
+
+avg_topk <- colMeans(ind_topk_mat)
+avg_rank_topk <- colMeans(rank_topk)
+
+is_10x <- c("10x 3' v1", "10x 3' v2", "10x 3' v2/v3", "10x 3' v3", "10x 5' v1", "10x 5' v2")
+
+
+tt1 <- data.frame(
+  ID = names(avg_rank_topk),
+  Agree_global = avg_rank_topk
+) %>% 
+  left_join(mcg_meta, by = "ID") %>% 
+  mutate(Is_10X = Platform %in% is_10x)
+
+
+plot(log10(tt1$N_cells), tt1$Agree_global)
+plot(log10(tt1$Median_UMI), tt1$Agree_global)
+plot(log10(tt1$N_msr_postfilt), tt1$Agree_global)
+plot(log10(tt1$N_msr_prefilt), tt1$Agree_global)
+boxplot(tt1$Agree_global ~ tt1$Is_10X)
+
+
+
+# Proportion of experiments needed to achieve recovery
+
+rec_df <- lapply(keep_tfs_mm, function(gene) {
+  
+  n_msr <- filter(msr_mm, Symbol == gene)$N_msr
+  
+  min_step <- bind_rows(lapply(step_l, function(x) x[gene, ])) %>% 
+    mutate(N_step = steps) %>%
+    filter(N_step <= n_msr) %>%   # TODO: fix
+    filter(Mean >= (k * 0.8)) %>% 
+    slice_min(N_step, n = 1) %>%
+    pull(N_step)
+  
+  if (length(min_step) == 0) min_step <- 0
+  
+  data.frame(Symbol = gene, 
+             Min_n = min_step, 
+             Min_prop = min_step / n_msr)
+  
+})
+
+
+rec_df <- do.call(rbind, rec_df)
+
+
+
+
+
+# Plotting
+# ------------------------------------------------------------------------------
 
 
 # Showing TopK overlap of individual experiments to global
@@ -257,15 +345,9 @@ plot_topk_steps <- function(gene, step_l, k) {
 }
 
 
-gene <- "Runx1"
+gene <- "Mef2c"
 plot_topk_ind(gene, ind_topk_mat, k)
 plot_topk_steps(gene, step_l, k)
-
-
-
-
-
-
 
 
 
