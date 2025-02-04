@@ -13,7 +13,7 @@ pc_df_mm <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
 
 
 # Microglia meta with file paths
-mcg_meta <- read.delim(mcg_meta_path) %>% distinct(ID, .keep_all = TRUE)
+mcg_meta <- read.delim(mcg_meta_dedup_path)
 meta_hg <- filter(mcg_meta, Species == "Human")
 meta_mm <- filter(mcg_meta, Species == "Mouse")
 
@@ -40,6 +40,8 @@ save_coexpr_multi_dataset <- function(input_df,
     if (file.exists(file)) next()
     
     ct <- input_df[input_df$ID == id, "Cell_type"]
+    ct <- unlist(str_split(ct, ";"))
+    
     dat_path <- unique(input_df[input_df$ID == id, "Path"])
     
     # Load dataset and get count matrix for current cell type
