@@ -40,7 +40,7 @@ sc_dir <- "/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_pr
 amat_dir <- "/space/scratch/amorin/TR_singlecell"
 
 # List of cell types per dataset
-celltype_list_path <- "/space/scratch/amorin/R_objects/celltype_list.RDS"
+celltype_list_path <- "/space/scratch/amorin/TRsc_output/celltype_list.RDS"
 
 # ENSEMBL and Refseq Select protein coding paths
 ref_hg_path <- "/space/grp/amorin/Metadata/refseq_select_hg38_jan2024.tsv"
@@ -51,6 +51,10 @@ ens_mm_path <- "/space/grp/amorin/Metadata/ensembl_mouse_protein_coding_105.tsv"
 # AnimalTFDB paths for TF genes
 tfs_hg_path <-  "/space/grp/amorin/Metadata/AnimalTFDB_human_V4.tsv"
 tfs_mm_path <-  "/space/grp/amorin/Metadata/AnimalTFDB_mouse_V4.tsv"
+
+# Orthology mapping
+pc_ortho_path <- "/space/grp/amorin/Metadata/hg_mm_1to1_ortho_genes_DIOPT_V9.tsv"
+
 
 
 ## ---
