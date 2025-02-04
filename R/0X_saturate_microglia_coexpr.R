@@ -24,12 +24,15 @@ agg_l_mm_path <- "/space/scratch/amorin/aggregate_microglia/Cormats/Mm_pcor/TF_c
 
 
 
+# List of measurement info to keep filtered genes
+count_summ <- readRDS(mcg_count_summ_list_path)
+
 
 # Loads aggregate correlation matrices or NA count matrices for the given dataset
 # ids into a list. 
 # Pattern: "_NA_mat.tsv" for NA counts
 
-load_agg_mat_list  <- function(ids,
+load_mat_to_list  <- function(ids,
                                dir,
                                pattern,  
                                genes,
@@ -61,11 +64,11 @@ load_or_generate_agg <- function(path,
   
   if (!file.exists(path)) {
     
-    agg_l <- load_agg_mat_list(ids = ids, 
-                               dir = dir,
-                               genes = genes, 
-                               pattern = pattern,
-                               sub_genes = sub_genes)
+    agg_l <- load_mat_to_list(ids = ids, 
+                              dir = dir,
+                              genes = genes, 
+                              pattern = pattern,
+                              sub_genes = sub_genes)
     
     saveRDS(agg_l, path)
   } else {
@@ -76,49 +79,48 @@ load_or_generate_agg <- function(path,
 }
 
 
+# Subset cormat to min thresholded genes, NA->0 and FZ transform
 
-tt1 <- load_agg_mat_list(ids = ids_mm[1],
-                         dir = path_mm,
-                         pattern = pattern,
-                         genes = pc_mm$Symbol,
-                         sub_genes = tfs_mm$Symbol)
-
-
-
-
-
-
-
+ready_cmat <- function(cmat, keep_genes, keep_tfs) {
+  
+  cmat <- cmat[keep_mm, keep_tfs_mm]
+  cmat[is.na(cmat)] <- 0
+  cmat[cmat > 1] <- 1
+  cmat[cmat < -1] <- -1
+  fisherz(cmat)
+  
+}
 
 
-mat1 <- tt1$HypoMap
-mat2 <- agg_mm$Agg_mat[, tfs_mm$Symbol]
 
-mat1[is.na(mat1)] <- 0
-mat2[is.na(mat2)] <- 0
-
-
-topk <- pair_colwise_topk(mat1 = mat1,
-                          mat2 = mat2,
-                          k = 200,
-                          ncores = ncore)
+keep_mm <- count_summ$Mouse$Filter_genes
+keep_tfs_mm <- intersect(keep_mm, tfs_mm$Symbol)
+agg_mat <- agg_mm$Agg_mat[keep_mm, keep_tfs_mm]
 
 
-check_gene <- "Rpl11"
-
-df <- data.frame(Symbol = pc_mm$Symbol,
-                 Agg = agg_mm$Agg_mat[, check_gene], 
-                 Msr = length(ids_mm) - agg_mm$NA_mat[, check_gene],
-                 Is_TF = pc_mm$Symbol %in% tfs_mm$Symbol)
-
-df <- filter(df, Msr >= 5)
-
-hist(df$Agg, breaks = 1000 )
+cmat_l <- load_mat_to_list(ids = ids_mm[1:2],
+                           dir = path_mm,
+                           pattern = pattern,
+                           genes = pc_mm$Symbol,
+                           sub_genes = tfs_mm$Symbol)
 
 
-keep_genes <- names(diag(agg_mm$NA_mat) >= 5)
-keep_tfs <- intersect(tfs_mm$Symbol, keep_genes)
 
-ph <- pheatmap::pheatmap(mat2[keep_genes, keep_tfs],
-                         cluster_rows = TRUE,
-                         cluster_cols = TRUE)
+
+
+
+cmat_l <- lapply(cmat_l, ready_cmat, keep_mm, keep_tfs_mm)
+
+
+
+
+ind_topk_l <- lapply(cmat_l, function(mat) {
+  pair_colwise_topk(mat1 = mat,
+                    mat2 = agg_mat,
+                    k = 200,
+                    ncores = ncore)
+})
+
+
+
+
