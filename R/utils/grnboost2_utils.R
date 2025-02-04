@@ -115,27 +115,57 @@ average_and_save_each_network <- function(ids,
 
 # Compile all averaged GRNBoost2 networks into one global average matrix
 
-average_all_networks <- function(avg_grn_l) {
+average_all_networks <- function(avg_grn_l, keep_genes, keep_tfs) {
   
-  all_tfs <- Reduce(union, lapply(avg_grn_l, colnames))
-  all_genes <- Reduce(union, lapply(avg_grn_l, rownames))
-  
-  # Init matrix that tracks all encountered genes/TFs
-  track_avg_mat <- matrix(0, nrow = length(all_genes), ncol = length(all_tfs))
-  rownames(track_avg_mat) <- all_genes
-  colnames(track_avg_mat) <- all_tfs
+  # Init tracking matrix that includes final genes to keep
+  track_mat <- matrix(0, nrow = length(keep_genes), ncol = length(keep_tfs))
+  rownames(track_mat) <- keep_genes
+  colnames(track_mat) <- keep_tfs
   
   # Make each matrix have equal dimensions/ordering
-  avg_grn_l <- lapply(avg_grn_l, function(x) {
+  mat_l <- lapply(avg_grn_l, function(x) {
     
-    tf_ix <- match(colnames(x), all_tfs)
-    gene_ix <- match(rownames(x), all_genes)
-    track_avg_mat[gene_ix, tf_ix] <- x
-    track_avg_mat
+    common_gene <- intersect(keep_genes, rownames(x))
+    common_tf <- intersect(keep_tfs, colnames(x))
+    track_mat[common_gene, common_tf] <- x[common_gene, common_tf]
+    track_mat
     
   })
   
-  all_avg_mat <- average_mat_list(avg_grn_l)
+  avg_mat <- average_mat_list(mat_l)
   
-  return(all_avg_mat)
+  return(avg_mat)
+}
+
+
+
+# All rank the averaged importance scores
+
+rank_aggregate_grn <- function(avg_grn_l, keep_genes, keep_tfs) {
+  
+  # Init aggregate matrix and tracking matrix to hold averaged importance scores
+  amat <- matrix(0, nrow = length(keep_genes), ncol = length(keep_tfs))
+  rownames(amat) <- keep_genes
+  colnames(amat) <- keep_tfs
+  keep_mat <- amat
+  
+  for (mat in avg_grn_l) {
+    
+    # Fill tracking matrix with measured values
+    common_genes <- intersect(rownames(mat), keep_genes)
+    common_tfs <- intersect(colnames(mat), keep_tfs)
+    keep_mat[common_genes, common_tfs] <- mat[common_genes, common_tfs]
+    
+    # Rank standardize
+    rmat <- allrank_mat(-keep_mat, ties_arg = "min")
+    rmat <- rmat / max(rmat, na.rm = TRUE)
+    amat <- amat + rmat
+    
+  }
+  
+  # Finalize aggregate matrix
+  amat <- allrank_mat(-amat, ties_arg = "min")
+  amat <- amat / max(amat, na.rm = TRUE)
+
+  return(amat)
 }
