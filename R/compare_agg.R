@@ -9,8 +9,9 @@ source("R/utils/functions.R")
 k <- 200
 set.seed(5)
 
-dat_dir <- file.path(data_out_dir, "CSCORE")
 mcg_meta <- read.delim(mcg_meta_dedup_path, stringsAsFactors = FALSE)
+ids_mm <- filter(mcg_meta, Species == "Mouse")$ID
+ids_hg <- filter(mcg_meta, Species == "Human")$ID
 
 pc_hg <- read.delim(ref_hg_path)
 pc_mm <- read.delim(ref_mm_path)
@@ -20,11 +21,14 @@ tfs_mm <- read.delim(tfs_mm_path)
 allrank_sub_mm <- readRDS("~/mcgdat/Cormats/Mm_pcor/aggregate_cormat_allrank_filter_lenient_mm.RDS")
 allrank_mm <- readRDS("~/mcgdat/Cormats/Mm_pcor/aggregate_cormat_allrank_mm.RDS")
 scor_allrank_mm <- readRDS(file.path(cmat_dir_mm, "aggregate_cormat_allrank_filter_scor_mm.RDS"))
-# scor_fz_mm <- readRDS(file.path(cmat_dir_mm, "aggregate_cormat_FZ_filter_scor_mm.RDS"))
+scor_fz_mm <- readRDS(file.path(cmat_dir_mm, "aggregate_cormat_FZ_filter_scor_mm.RDS"))
 fz_mm <- readRDS("~/mcgdat/Cormats/Mm_pcor/aggregate_cormat_FZ_mm.RDS")
 csc_mm <- readRDS("~/mcgdat/CSCORE_aggregate_microglia_mm.RDS")
 grn_avg_mm <- readRDS("~/mcgdat/GRNBoost2_average_mat_mm.RDS")
 grn_allrank_mm <- readRDS("~/mcgdat/GRNBoost2_allrank_mat_mm.RDS")
+
+#
+# mcg_dat <- readRDS(mcg_dat_path)
 
 # List of gene count measurement summaries
 count_summ <- readRDS(mcg_count_summ_list_path)
@@ -60,8 +64,8 @@ comparisons <- list(
   RSub_vs_GRN = list(allrank_sub_mm$Agg_mat[, keep_tfs_mm], grn_avg_mm),
   FZSub_vs_GRN = list(fz_mm$Agg_mat[keep_mm, keep_tfs_mm], grn_avg_mm),
   CSC_vs_GRN = list(csc_mm[, keep_tfs_mm], grn_avg_mm),
-  ScorR_vs_Rsub = list(scor_allrank_mm$Agg_mat, allrank_sub_mm$Agg_mat)
-  # ScorFZ_vs_FZ = list(scor_fz_mm$Agg_mat, fz_mm$Agg_mat[keep_mm, keep_mm])
+  ScorR_vs_Rsub = list(scor_allrank_mm$Agg_mat, allrank_sub_mm$Agg_mat),
+  ScorFZ_vs_FZ = list(scor_fz_mm$Agg_mat, fz_mm$Agg_mat[keep_mm, keep_mm])
 )
 
 
@@ -88,8 +92,8 @@ compare_df <- data.frame(
   RSub_vs_GRN = fill_gene_vec(res$RSub_vs_GRN, keep_mm),
   FZSub_vs_GRN = fill_gene_vec(res$FZSub_vs_GRN, keep_mm),
   CSC_vs_GRN = fill_gene_vec(res$CSC_vs_GRN, keep_mm),
-  ScorR_vs_Rsub = res$ScorR_vs_Rsub
-  # ScorFZ_vs_FZ = tt10
+  ScorR_vs_Rsub = res$ScorR_vs_Rsub,
+  ScorFZ_vs_FZ = res$ScorFZ_vs_FZ
 )
 
 
@@ -115,12 +119,29 @@ ggplot(compare_df, aes(x = R_vs_RSub)) +
   geom_histogram(bins = 30, fill = "#38761dff", alpha = 0.8) +
   xlab("Top200") +
   ylab("Count of genes") +
-  ggtitle("Ranking with all genes vs. thresholded genes") +
+  ggtitle("Ranking Pcor with all genes vs. thresholded genes") +
   theme_classic() +
   theme(text = element_text(size = 20))
 
 
-null_topk <- pair_shuffle_topk(
+
+
+
+# scor <- pair_colwise_cor(
+#   comparisons$ScorR_vs_Rsub[[1]][, keep_tfs_mm],
+#   comparisons$ScorR_vs_Rsub[[2]][, keep_tfs_mm],
+#   ncores = ncore
+# )
+# 
+# null_scor <- pair_shuffle_cor(
+#   comparisons$ScorR_vs_Rsub[[1]][, keep_tfs_mm],
+#   comparisons$ScorR_vs_Rsub[[2]][, keep_tfs_mm],
+#   ncores = ncore
+# )
+
+
+
+null_topk1 <- pair_shuffle_topk(
   comparisons$ScorR_vs_Rsub[[1]][, keep_tfs_mm],
   comparisons$ScorR_vs_Rsub[[2]][, keep_tfs_mm],
   k = k,
@@ -129,44 +150,96 @@ null_topk <- pair_shuffle_topk(
 
 
 ggplot(filter(compare_df, Is_TF), aes(x = ScorR_vs_Rsub)) +
-  geom_histogram(bins = 30, fill = "#38761dff", alpha = 0.8) +
-  geom_vline(xintercept = mean(null_topk), linetype = "dashed", colour = "darkgrey") +
+  geom_histogram(bins = 30, fill = "#54278f", alpha = 0.8) +
+  geom_vline(xintercept = mean(null_topk1), linetype = "dashed", colour = "darkgrey") +
   xlab("Top200") +
   ylab("Count of genes") +
-  ggtitle("Ranked Pcor vs. Ranked Scor") +
+  ggtitle("Ranked Pcor vs. Ranked Scor (TFs only)") +
   theme_classic() +
   theme(text = element_text(size = 20))
 
 
 
-plot_mat <- as.matrix(select_if(compare_df, is.numeric))
-# plot_mat <- plot_mat[names(avg_topk), ]
-# plot_mat <- plot_mat[names(avg_tfs_topk), ]
-plot_mat <- plot_mat[names(avg_tfs_topk)[1:100], ]
+null_topk2 <- pair_shuffle_topk(
+  comparisons$ScorFZ_vs_FZ[[1]][, keep_tfs_mm],
+  comparisons$ScorFZ_vs_FZ[[2]][, keep_tfs_mm],
+  k = k,
+  ncores = ncore
+)
 
+
+
+ggplot(filter(compare_df, Is_TF), aes(x = ScorFZ_vs_FZ)) +
+  geom_histogram(bins = 30, fill = "#ff7f00", alpha = 0.8) +
+  geom_vline(xintercept = mean(null_topk2), linetype = "dashed", colour = "darkgrey") +
+  xlab("Top200") +
+  ylab("Count of genes") +
+  ggtitle("FZ Pcor vs. FZ Scor (TFs only)") +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+
+plot_mat <- as.matrix(compare_df[, c(names(comparisons), "Avg_overlap")])
+rownames(plot_mat) <- keep_mm
+# plot_mat <- plot_mat[top_overlap, ]
+plot_mat <- plot_mat[top_tfs_overlap, ]
+# plot_mat <- plot_mat[top_tfs_overlap[1:100], ]
+
+
+pal <- colorRampPalette(c("white", "#ca0020"))(10)
 
 pheatmap(plot_mat,
          cluster_rows = FALSE,
          cluster_cols = FALSE,
-         show_rownames = FALSE)
+         show_rownames = FALSE,
+         color = pal,
+         border_color = NA,
+         gaps_col = rep((ncol(plot_mat) - 1), 3),
+         fontsize = 20)
 
 
-plot(msr_mm[keep_mm, "QN_avg"], avg_topk[keep_mm])
-plot(msr_mm[keep_tfs_mm, "QN_avg"], avg_topk[keep_tfs_mm])
+ggplot(compare_df, aes(x = QN_avg, y = Avg_overlap)) +
+  geom_point(shape = 21) +
+  theme_classic() +
+  theme(text = element_text(size = 20))
 
-plot(msr_mm[keep_mm, "N_msr"], avg_topk[keep_mm])
-plot(msr_mm[keep_tfs_mm, "N_msr"], avg_topk[keep_tfs_mm])
+ggplot(compare_df, aes(x = N_msr, y = Avg_overlap)) +
+  geom_point(shape = 21) +
+  theme_classic() +
+  theme(text = element_text(size = 20))
 
 
 
-check_gene <- "Mef2c"
+ggplot(filter(compare_df, Is_TF), aes(x = QN_avg, y = Avg_overlap)) +
+  geom_point(shape = 21) +
+  geom_smooth(method = "lm") +
+  xlab("Mean log2 CPM") +
+  ylab("Mean Top200 across strategies") +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+ggplot(filter(compare_df, Is_TF), aes(x = N_msr, y = Avg_overlap)) +
+  geom_point(shape = 21) +
+  geom_smooth(method = "lm") +
+  xlab("Count measured") +
+  ylab("Mean Top200 across strategies") +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+# compare_df %>% filter(Is_TF & QN_avg > 4) %>% slice_min(Avg_overlap, n = 1)
+
+
+check_gene <- "Tcf4"
 
 df <- data.frame(
   Symbol = keep_mm,
   Allrank = allrank_mm$Agg_mat[keep_mm, check_gene],
   Allrank_sub = allrank_sub_mm$Agg_mat[keep_mm, check_gene],
   Scor_allrank = scor_allrank_mm$Agg_mat[keep_mm, check_gene],
-  # Scor_FZ = scor_fz_mm$Agg_mat[keep_mm, check_gene],
+  Scor_FZ = scor_fz_mm$Agg_mat[keep_mm, check_gene],
   FZ = fz_mm$Agg_mat[keep_mm, check_gene],
   CSCORE = csc_mm[keep_mm, check_gene],
   GRN_avg = grn_avg_mm[, check_gene],
@@ -182,33 +255,111 @@ colwise_topk_intersect(as.matrix(select_if(df, is.numeric)), k = 200)
 colwise_topk_intersect(-as.matrix(select_if(df, is.numeric)), k = 200)
 
 
-plot(df$FZ, df$CSCORE)
-plot(df$Allrank, df$CSCORE)
+
+ggplot(df, aes(x = Allrank_sub, y = Scor_allrank)) +
+  geom_point(shape = 21) +
+  xlab("Ranked Pcor") +
+  ylab("Ranked Scor") +
+  ggtitle(check_gene) +
+  theme_classic() +
+  theme(text = element_text(size = 30),
+        plot.margin = margin(10, 20, 10, 10))
 
 
-plot(df$FZ, df$Allrank)
-plot(df$FZ, df$Allrank_sub)
-plot(df$FZ, df$GRN_avg)
-plot(df$FZ, df$GRN_allrank)
 
-plot(df$CSCORE, df$Allrank_sub)
-plot(df$CSCORE, df$GRN_avg)
-plot(df$CSCORE, df$GRN_allrank)
-
-plot(df$Allrank, df$Allrank_sub)
-
-plot(df$FZ, df$N_msr)
-plot(df$FZ, df$QN_avg)
-
-plot(df$Allrank, df$N_msr)
-plot(df$Allrank, df$QN_avg)
-
-plot(df$CSCORE, df$N_msr)
-plot(df$CSCORE, df$QN_avg)
+ggplot(df, aes(x = FZ, y = Scor_FZ)) +
+  geom_point(shape = 21) +
+  xlab("Average Fisher's Z Pcor") +
+  ylab("Average Fisher's Z Scor") +
+  ggtitle(check_gene) +
+  theme_classic() +
+  theme(text = element_text(size = 30),
+        plot.margin = margin(10, 20, 10, 10))
 
 
-plot(df$Allrank_sub, df$Scor_allrank)
-plot(df$CSCORE, df$QN_avg)
+ggplot(df, aes(x = Allrank_sub, y = CSCORE)) +
+  geom_point(shape = 21) +
+  xlab("Ranked Pcor") +
+  ylab("Ranked CSCORE") +
+  ggtitle(check_gene) +
+  theme_classic() +
+  theme(text = element_text(size = 30),
+        plot.margin = margin(10, 20, 10, 10))
+
+
+ggplot(df, aes(x = Allrank_sub, y = FZ)) +
+  geom_point(shape = 21) +
+  xlab("Ranked Pcor") +
+  ylab("Average Fisher's Z Pcor") +
+  ggtitle(check_gene) +
+  theme_classic() +
+  theme(text = element_text(size = 30),
+        plot.margin = margin(10, 20, 10, 10))
+
+
+ggplot(df, aes(x = Allrank_sub, y = GRN_avg)) +
+  geom_point(shape = 21) +
+  xlab("Ranked Pcor") +
+  ylab("Average GRNBoost2") +
+  ggtitle(check_gene) +
+  theme_classic() +
+  theme(text = element_text(size = 30),
+        plot.margin = margin(10, 20, 10, 10))
+
+
+ggplot(df, aes(x = FZ, y = GRN_avg)) +
+  geom_point(shape = 21) +
+  xlab("Average Fisher's Z Pcor") +
+  ylab("Average GRNBoost2") +
+  ggtitle(check_gene) +
+  theme_classic() +
+  theme(text = element_text(size = 30),
+        plot.margin = margin(10, 20, 10, 10))
+
+
+
+# Looking at Tcf4 - Lat2
+# df %>% slice_max(GRN_avg, n = 100) %>% filter(FZ > -0.02 & FZ < 0.02)
+
+cor_vec <- sapply(mcg_dat[ids_mm], function(x) {
+  aggtools::fisherz(cor(x$Mat["Tcf4", ], x$Mat["Lat2", ]))
+})
+
+
+
+
+grn_l <- sapply(ids_mm, function(x) {
+  read.delim(file.path(data_out_dir, "GRNBoost2", x, paste0(x, "_average_GRN.tsv")), sep = "\t")
+})
+
+grn_vec <- sapply(grn_l, function(x) x[x$X == "Lat2", "Tcf4"])
+grn_vec <- unlist(grn_vec[sapply(grn_vec, length) > 0])
+
+
+
+
+full_grn_vec <- setNames(rep(0, length(cor_vec)), names(cor_vec))
+full_grn_vec[names(grn_vec)] <- grn_vec
+
+
+data.frame(FZ = cor_vec) %>% 
+  ggplot(aes(x = FZ)) +
+  geom_histogram(fill = "#fb8072") +
+  theme_classic() +
+  theme(text = element_text(size = 30),
+        plot.margin = margin(10, 20, 10, 10))
+
+
+
+data.frame(GRNBoost2 = full_grn_vec) %>% 
+  ggplot(aes(x = GRNBoost2)) +
+  geom_histogram(fill = "#8dd3c7") +
+  theme_classic() +
+  theme(text = element_text(size = 30),
+        plot.margin = margin(10, 20, 10, 10))
+
+
+plot(cor_vec, full_grn_vec)
 
 
 # https://pmc.ncbi.nlm.nih.gov/articles/PMC6377292/
