@@ -67,16 +67,16 @@ ortho_df <- pc_ortho %>%
             suffix = c("_hg", "_mm"))
 
   
-label_tfs_hg <- ortho_df_filt %>% 
+label_tfs_hg <- ortho_df %>% 
   filter(Is_TF_hg) %>% 
   slice_max(QN_avg_hg, n = 15)
 
-label_tfs_mm <- ortho_df_filt %>% 
+label_tfs_mm <- ortho_df %>% 
   filter(Is_TF_mm) %>% 
   slice_max(QN_avg_mm, n = 15)
 
 
-# label_tfs <- ortho_df_filt %>% 
+# label_tfs <- ortho_df %>% 
 #   filter(Is_TF) %>% 
 #   mutate(Avg = rowMeans(.[, c("QN_avg_hg", "QN_avg_mm")]))
 
@@ -107,11 +107,10 @@ summary(fit)
 
 
 ggplot(ortho_df_filt, aes(x = QN_avg_mm, y = QN_avg_hg)) +
-  # geom_point(data = filter(ortho_df_filt, !Is_TF),
-  #            shape = 21, size = 2.4, alpha = 0.2) +
-  # geom_point(data = filter(ortho_df_filt, Is_TF),
-  # shape = 21, size = 3.4) +
-  geom_point(shape = 21, size = 3.4, alpha = 0.2) +
+  geom_point(data = filter(ortho_df_filt, !Is_TF),
+             shape = 21, size = 2.4, alpha = 0.2) +
+  geom_point(data = filter(ortho_df_filt, Is_TF),
+  shape = 21, size = 3.4) +
   geom_smooth(method = "lm", colour = "royalblue") +
   xlab("Mouse mean log2 CPM") +
   ylab("Human mean log2 CPM") +
