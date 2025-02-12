@@ -166,3 +166,53 @@ topk_df <- mat_to_df(topk_mat, value = "Topk")
 topk_mat <- cbind(all_bind_mm[keep_mm, ], Coexpr = agg_mm$Agg_mat[keep_mm, gene_mm])
 topk_mat <- colwise_topk_intersect(topk_mat, k = k)
 topk_df <- mat_to_df(topk_mat, value = "Topk")
+
+
+bind_mat_mm <- bind_dat$Permissive_mm$Mat_qnl[keep_mm, ]
+# bind_mat_mm <- bind_dat$Permissive_mm$Mat_qnl
+agg_vec <- topk_sort(agg_mm$Agg_mat[keep_mm, "Spi1"], k = k)
+
+
+topk_l <- mclapply(1:ncol(bind_mat_mm), function(x) {
+  topk_intersect(agg_vec, topk_sort(bind_mat_mm[, x], k = k))
+}, mc.cores = ncore)
+
+
+stopifnot(identical(colnames(bind_mat_mm), bind_dat$Permissive_mm$Meta$ID))
+
+
+topk_df <- data.frame(
+  ID = bind_dat$Permissive_mm$Meta$ID,
+  Topk = unlist(topk_l),
+  Symbol = bind_dat$Permissive_mm$Meta$Symbol,
+  Mcg = bind_dat$Permissive_mm$Meta$ID %in% mcg_bind_ids_mm
+)
+
+topk_df <- topk_df %>%
+  mutate(
+    Group = case_when(
+      Symbol == "SPI1" & Mcg ~ "SPI mcg",
+      Symbol == "SPI1" & !Mcg ~ "SPI Non-mcg",
+      Symbol != "SPI1" ~ "Non-SPI1"
+    ),
+    Group = factor(Group, levels = c("Non-SPI1", "SPI Non-mcg", "SPI mcg"))
+  )
+
+
+
+
+ggplot(topk_df, aes(x = Group, y = Topk)) +
+  geom_violin(fill = "slategrey") +
+  # geom_violin(fill = "slategrey", alpha = 0.1) +
+  geom_jitter(data = filter(topk_df, Group != "Non-SPI1"),
+              shape = 21, size = 2.4, width = 0.1) +
+  geom_boxplot(width = 0.05) +
+  
+  ylab("Top200") +
+  xlab(NULL) +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+
+     
