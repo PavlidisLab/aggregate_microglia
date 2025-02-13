@@ -6,12 +6,15 @@ library(data.table)
 library(aggtools)
 library(ggrepel)
 library(parallel)
+library(egg)
+library(pheatmap)
 source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/vector_comparison_functions.R")
 
 n_iter <- 100  # How many samples to run per step
 k <- 200  # TopK overlap
+set.seed(5)
 
 # Dataset meta and data IDs
 mcg_meta <- read.delim(mcg_meta_dedup_path)
@@ -169,17 +172,28 @@ na_mat_l <- lapply(cmat_l, function(x) {
 })
 
 
-# TopK overlap of each individual dataset with the global
-ind_topk_l <- lapply(cmat_l, function(mat) {
-  pair_colwise_topk(mat1 = mat,
-                    mat2 = agg_mat_mm,
-                    k = k,
-                    ncores = ncore)
-})
+
+if (!file.exists(ind_topk_path)) {
+  
+  # TopK overlap of each individual dataset with the global
+  ind_topk_l <- lapply(cmat_l, function(mat) {
+    pair_colwise_topk(mat1 = mat,
+                      mat2 = agg_mat_mm,
+                      k = k,
+                      ncores = ncore)
+  })
+  
+  ind_topk_mat <- do.call(cbind, ind_topk_l)
+  
+  saveRDS(ind_topk_mat, ind_topk_path)
+  
+}
 
 
 
-ind_topk_mat <- do.call(cbind, ind_topk_l)
+
+
+
  
 
 # TODO: function
@@ -188,37 +202,79 @@ steps <- 2:(length(ids_mm) - 1)
 
 
 
-step_l <- mclapply(steps, function(step) {
-  
-  message(paste("Step ==", step, Sys.time()))
-  
-  iter_l <- lapply(1:n_iter, function(iter) {
-    
-    sample_ids <- sample(ids_mm, size = step, replace = FALSE)
-    msr_mat <- count_msr(na_mat_l[sample_ids])  # count of msr'd among samples
-    avg_sample <- Reduce("+", cmat_l[sample_ids]) / msr_mat
-    pair_colwise_topk(mat1 = avg_sample, mat2 = agg_mat_mm, k = k, ncores = 1)
 
+# Using all matrices all at once. A gene may not be measured in a sample.
+
+# step_l <- mclapply(steps, function(step) {
+# 
+#   message(paste("Step ==", step, Sys.time()))
+#   
+#   iter_l <- lapply(1:n_iter, function(iter) {
+#     
+#     sample_ids <- sample(ids_mm, size = step, replace = FALSE)
+#     msr_mat <- count_msr(na_mat_l[sample_ids])  # count of msr'd among samples
+#     avg_sample <- Reduce("+", cmat_l[sample_ids]) / msr_mat
+#     avg_sample[is.na(avg_sample)] <- 0  # 0/0 -> NA, convert back to 0s
+#     pair_colwise_topk(mat1 = avg_sample, mat2 = agg_mat_mm, k = k, ncores = 1)
+# 
+#   })
+#   
+#   iter_mat <- do.call(rbind, iter_l)
+#   iter_summ <- colwise_summary(iter_mat)
+# 
+#   return(iter_summ)
+#   
+# }, mc.cores = ncore)
+
+
+
+
+# By TF, keeping only datasets that measure the TF
+
+step_l <- mclapply(keep_tfs_mm, function(tf) {
+  
+  message(paste(tf, Sys.time()))
+  
+  msr_ids <- names(which(!sapply(na_mat_l, function(x) x[tf, tf])))
+  tf_mat <- as.matrix(bind_cols(lapply(cmat_l[msr_ids], function(x) x[, tf])))
+  tf_mat[tf_mat == 0] <- NA  # TODO: rm and skip na->0 in ready mat if keeping
+  
+  rownames(tf_mat) <- keep_mm
+  agg_vec <- topk_sort(agg_mat_mm[, tf], k = k)
+  
+  
+  steps <- 2:(length(msr_ids) - 1)
+  
+  step_l <- lapply(steps, function(step) {
+    
+    iter_l <- lapply(1:n_iter, function(iter) {
+      
+      sample_ids <- sample(msr_ids, size = step, replace = FALSE)
+      avg_sample <- rowMeans(tf_mat[, sample_ids], na.rm = TRUE)
+      sample_vec <- topk_sort(avg_sample, k = k)
+      topk_intersect(agg_vec, sample_vec)
+      
+    })
+    
+    iter_summ <- summary(unlist(iter_l))
+    
   })
   
-  iter_mat <- do.call(rbind, iter_l)
-  iter_summ <- colwise_summary(iter_mat)
-
-  return(iter_summ)
+  step_summ <- cbind(do.call(rbind, step_l), N_step = steps)
   
 }, mc.cores = ncore)
+names(step_l) <- keep_tfs_mm
 
 
-
-saveRDS(ind_topk_mat, ind_topk_path)
 saveRDS(step_l, saturation_path)
 
 
-stop()
+
 
 
 ind_topk_mat <- readRDS(ind_topk_path)
 step_l <- readRDS(saturation_path)
+
 
 
 # Summarize 
@@ -231,13 +287,18 @@ step_l <- readRDS(saturation_path)
 rank_topk <- t(colrank_mat(t(-ind_topk_mat)))
 rank_topk <- rank_topk / max(rank_topk)
 
+rank_topk <- rank_topk[order(rowMeans(rank_topk)), order(colMeans(rank_topk))]
+
+
 avg_topk <- colMeans(ind_topk_mat)
 avg_rank_topk <- colMeans(rank_topk)
+
+
 
 is_10x <- c("10x 3' v1", "10x 3' v2", "10x 3' v2/v3", "10x 3' v3", "10x 5' v1", "10x 5' v2")
 
 
-tt1 <- data.frame(
+plot_df <- data.frame(
   ID = names(avg_rank_topk),
   Agree_global = avg_rank_topk
 ) %>% 
@@ -245,39 +306,133 @@ tt1 <- data.frame(
   mutate(Is_10X = Platform %in% is_10x)
 
 
-plot(log10(tt1$N_cells), tt1$Agree_global)
-plot(log10(tt1$Median_UMI), tt1$Agree_global)
-plot(log10(tt1$N_msr_postfilt), tt1$Agree_global)
-plot(log10(tt1$N_msr_prefilt), tt1$Agree_global)
-boxplot(tt1$Agree_global ~ tt1$Is_10X)
+
+pheatmap(rank_topk,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         show_rownames = FALSE)
+
+
+pheatmap(t(avg_rank_topk),
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         border_color = "black",
+         fontsize = 20,
+         cellheight = 20)
+
+
+
+ggplot(plot_df, aes(x = log10(N_cells), y = Agree_global)) +
+  geom_point(shape = 21, size = 3) +
+  geom_smooth(method = "lm") +
+  xlab("Log10 count of cells") +
+  ylab("Global agreement") +
+  theme_classic() +
+  theme(text = element_text(size = 30),
+        plot.margin = margin(10, 20, 10, 10))
+
+
+ggplot(plot_df, aes(x = Is_10X, y = Agree_global)) +
+  geom_boxplot(width = 0.2) +
+  geom_jitter(shape = 21, size = 2.4, fill = "slategrey", width = 0.05) +
+  xlab("10X platform") +
+  ylab("Global agreement") +
+  theme_classic() +
+  theme(text = element_text(size = 30),
+        plot.margin = margin(10, 20, 10, 10))
+  
+
+
+
+# plot(log10(plot_df$N_cells), plot_df$Agree_global)
+# plot(log10(plot_df$Median_UMI), plot_df$Agree_global)
+# plot(log10(plot_df$N_msr_postfilt), plot_df$Agree_global)
+# plot(log10(plot_df$N_msr_prefilt), plot_df$Agree_global)
+# boxplot(plot_df$Agree_global ~ plot_df$Is_10X)
+# 
+
+
 
 
 
 # Proportion of experiments needed to achieve recovery
 
-rec_df <- lapply(keep_tfs_mm, function(gene) {
+
+rec_df <- lapply(names(step_l), function(gene) {
   
-  n_msr <- filter(msr_mm, Symbol == gene)$N_msr
+  gene_df <- as.data.frame(step_l[[gene]])
+  n_msr <- max(gene_df$N_step) + 1
   
-  min_step <- bind_rows(lapply(step_l, function(x) x[gene, ])) %>% 
-    mutate(N_step = steps) %>%
-    filter(N_step <= n_msr) %>%   # TODO: fix
+  min_step <- gene_df %>% 
     filter(Mean >= (k * 0.8)) %>% 
     slice_min(N_step, n = 1) %>%
     pull(N_step)
   
   if (length(min_step) == 0) min_step <- 0
   
-  data.frame(Symbol = gene, 
+  data.frame(Symbol = gene,
+             N_msr = n_msr,
              Min_n = min_step, 
              Min_prop = min_step / n_msr)
   
 })
 
 
-rec_df <- do.call(rbind, rec_df)
+rec_df <- do.call(rbind, rec_df) %>% 
+  as.data.frame() %>% 
+  left_join(msr_mm, by = "Symbol")
 
 
+
+
+# rec_df <- lapply(keep_tfs_mm, function(gene) {
+#   
+#   n_msr <- filter(msr_mm, Symbol == gene)$N_msr
+#   
+#   min_step <- bind_rows(lapply(step_l, function(x) x[gene, ])) %>% 
+#     mutate(N_step = steps) %>%
+#     filter(N_step <= n_msr) %>%   # TODO consider best way to handle med msr'd genes
+#     filter(Mean >= (k * 0.8)) %>% 
+#     slice_min(N_step, n = 1) %>%
+#     pull(N_step)
+#   
+#   if (length(min_step) == 0) min_step <- 0
+#   
+#   data.frame(Symbol = gene, 
+#              Min_n = min_step, 
+#              Min_prop = min_step / n_msr)
+#   
+# })
+# 
+# 
+# rec_df <- do.call(rbind, rec_df)
+
+
+
+hist(rec_df$Min_prop, breaks = 100)
+hist(rec_df$Min_n, breaks = 100)
+plot(rec_df$Min_prop, rec_df$QN_avg)
+plot(rec_df$Min_n, rec_df$QN_avg)
+
+
+ggplot(rec_df, aes(x = Min_prop)) +
+  geom_histogram(bins = 100, fill = "slategrey") +
+  ggtitle("Mouse") +
+  xlab("Proportion recovery") +
+  ylab("Count of TFs") +
+  theme_classic() +
+  theme(text = element_text(size = 30),
+        plot.margin = margin(10, 20, 10, 10))
+
+
+
+ggplot(rec_df, aes(x = QN_avg, y = Min_prop)) +
+  geom_point(shape = 21, size = 3) +
+  geom_smooth(method = "lm") +
+  xlab("Mean log2 CPM") +
+  ylab("Proportion recovery") +
+  theme_classic() +
+  theme(text = element_text(size = 20))
 
 
 
@@ -310,7 +465,7 @@ plot_topk_ind <- function(gene, ind_topk_mat, k) {
     xlab("Individual experiments") +
     ggtitle(gene) +
     theme_classic() +
-    theme(text = element_text(size = 30),
+    theme(text = element_text(size = 20),
           axis.text.x = element_blank(),
           axis.ticks.x = element_blank())
 }
@@ -321,8 +476,7 @@ plot_topk_ind <- function(gene, ind_topk_mat, k) {
 plot_topk_steps <- function(gene, step_l, k) {
   
   # Isolating steps as well as minimum steps to achieve recovery from summary df
-  plot_df <- bind_rows(lapply(step_l, function(x) x[gene, ])) %>% 
-    mutate(N_step = steps)
+  plot_df <- as.data.frame(step_l[[gene]])
   
   min_step <- plot_df %>% 
     filter(Mean >= (k * 0.8)) %>% 
@@ -330,7 +484,7 @@ plot_topk_steps <- function(gene, step_l, k) {
     pull(N_step)
   
   ggplot(plot_df, aes(x = N_step, y = Mean)) +
-    geom_crossbar(aes(x = N_step, ymin = QR1, ymax = QR3)) +
+    geom_crossbar(aes(x = N_step, ymin = `1st Qu.`, ymax = `3rd Qu.`)) +
     geom_point(shape = 19, colour = "firebrick") +
     geom_vline(xintercept = min_step, linetype = "dashed", colour = "black") +
     geom_hline(yintercept = (k * 0.8), linetype = "dashed", colour = "black") +
@@ -339,15 +493,45 @@ plot_topk_steps <- function(gene, step_l, k) {
     xlab("Count of sampled experiments") +
     ggtitle(gene) +
     theme_classic() +
-    theme(text = element_text(size = 30),
+    theme(text = element_text(size = 20),
           axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1),
           plot.margin = margin(10, 20, 10, 10))
 }
 
 
-gene <- "Mef2c"
-plot_topk_ind(gene, ind_topk_mat, k)
-plot_topk_steps(gene, step_l, k)
 
 
+# plot_topk_steps <- function(gene, step_l, k) {
+#   
+#   # Isolating steps as well as minimum steps to achieve recovery from summary df
+#   plot_df <- bind_rows(lapply(step_l, function(x) x[gene, ])) %>% 
+#     mutate(N_step = steps)
+#   
+#   min_step <- plot_df %>% 
+#     filter(Mean >= (k * 0.8)) %>% 
+#     slice_min(N_step, n = 1) %>%
+#     pull(N_step)
+#   
+#   ggplot(plot_df, aes(x = N_step, y = Mean)) +
+#     geom_crossbar(aes(x = N_step, ymin = QR1, ymax = QR3)) +
+#     geom_point(shape = 19, colour = "firebrick") +
+#     geom_vline(xintercept = min_step, linetype = "dashed", colour = "black") +
+#     geom_hline(yintercept = (k * 0.8), linetype = "dashed", colour = "black") +
+#     ylim(c(0, k)) +
+#     ylab(expr("Top"[!!k])) +
+#     xlab("Count of sampled experiments") +
+#     ggtitle(gene) +
+#     theme_classic() +
+#     theme(text = element_text(size = 30),
+#           axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1),
+#           plot.margin = margin(10, 20, 10, 10))
+# }
 
+
+gene <- "Runx1"
+p1a <- plot_topk_ind(gene, ind_topk_mat, k)
+p1b <- plot_topk_steps(gene, step_l, k) + ylab(NULL)
+p1 <- ggarrange(p1a, p1b, nrow = 1, widths = c(0.33, 1))
+
+ggsave(p1, height = 6, width = 16, device = "png", dpi = 300,
+    filename = file.path(plot_dir, paste0(gene, "_dataset_saturation.png")))
