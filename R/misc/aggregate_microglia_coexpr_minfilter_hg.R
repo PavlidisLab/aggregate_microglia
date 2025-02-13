@@ -11,26 +11,26 @@ source("R/00_config.R")
 source("R/utils/functions.R")
 
 # Gene table and dataset meta
-pc_df <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
-meta <- read.delim(mcg_meta_path) %>% filter(Species == "Mouse")
+pc_df <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
+meta <- read.delim(mcg_meta_path) %>% filter(Species == "Human")
 
 # Paths for the aggregate matrix lists
-allrank_len_path <- file.path(cmat_dir_mm, "aggregate_cormat_allrank_filter_lenient_mm.RDS")
-allrank_str_path <- file.path(cmat_dir_mm, "aggregate_cormat_allrank_filter_stringent_mm.RDS")
-colrank_len_path <- file.path(cmat_dir_mm, "aggregate_cormat_colrank_filter_lenient_mm.RDS")
-colrank_str_path <- file.path(cmat_dir_mm, "aggregate_cormat_colrank_filter_stringent_mm.RDS")
+allrank_len_path <- file.path(cmat_dir_hg, "aggregate_cormat_allrank_filter_lenient_hg.RDS")
+allrank_str_path <- file.path(cmat_dir_hg, "aggregate_cormat_allrank_filter_stringent_hg.RDS")
+colrank_len_path <- file.path(cmat_dir_hg, "aggregate_cormat_colrank_filter_lenient_hg.RDS")
+colrank_str_path <- file.path(cmat_dir_hg, "aggregate_cormat_colrank_filter_stringent_hg.RDS")
 
 
 # Only consider genes that are minimally measured across the collection
 count_summ <- readRDS(mcg_count_summ_list_path)
 
 # Lenient: require measured in at least a third of datasets
-keep_len <- count_summ$Mouse$Summ_df %>% 
+keep_len <- count_summ$Human$Summ_df %>% 
   filter(N_msr >= floor(max(N_msr) * 1/3)) %>%
   pull(Symbol)
 
 # Stringent: At least 90% of datasets
-keep_str <- count_summ$Mouse$Summ_df %>% 
+keep_str <- count_summ$Human$Summ_df %>% 
   filter(N_msr >= floor(max(N_msr) * 0.9)) %>% 
   pull(Symbol)
 
