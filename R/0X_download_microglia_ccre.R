@@ -11,10 +11,11 @@
 # ------------------------------------------------------------------------------
 
 library(tidyverse)
+source("R/00_config.R")
 
 
-path_hg <- "/space/grp/amorin/human_microglia_ccre_gene_cors.txt"
-path_mm <- "/space/grp/amorin/mouse_microglia_ccre_gene_cors.txt"
+path_hg <- file.path(data_out_dir, "human_microglia_ccre_gene_cors.txt")
+path_mm <- file.path(data_out_dir, "mouse_microglia_ccre_gene_cors.txt")
 
 url_hg <- "http://catlas.org/catlas_downloads/humanbrain/conns/MGC.pos.bedpe"
 url_mm <- "http://catlas.org/catlas_downloads/mousebrain/conns/MGL.pos.conns.bedpe"
