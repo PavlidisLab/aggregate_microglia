@@ -82,3 +82,8 @@ mcg_count_summ_list_path <- file.path(data_out_dir, "microglia_gene_count_summar
 mcg_count_summ_table_hg <- file.path(data_out_dir, "microglia_gene_count_summary_table_hg.tsv")
 mcg_count_summ_table_mm <- file.path(data_out_dir, "microglia_gene_count_summary_table_mm.tsv")
 macro_count_summ_list_path <- file.path(data_out_dir, "macrophage_gene_count_summary_list.RDS")
+
+
+# Microglia cCREs with region to gene predictions
+mcg_ccre_path_hg <- file.path(data_out_dir, "human_microglia_ccre_gene_cors.txt")
+mcg_ccre_path_mm <- file.path(data_out_dir, "mouse_microglia_ccre_gene_cors.txt")

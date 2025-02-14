@@ -14,9 +14,6 @@ library(tidyverse)
 source("R/00_config.R")
 
 
-path_hg <- file.path(data_out_dir, "human_microglia_ccre_gene_cors.txt")
-path_mm <- file.path(data_out_dir, "mouse_microglia_ccre_gene_cors.txt")
-
 url_hg <- "http://catlas.org/catlas_downloads/humanbrain/conns/MGC.pos.bedpe"
 url_mm <- "http://catlas.org/catlas_downloads/mousebrain/conns/MGL.pos.conns.bedpe"
 
@@ -75,5 +72,5 @@ download_and_format_ccre <- function(path, url) {
 }
 
 
-download_and_format_ccre(path_hg, url_hg)
-download_and_format_ccre(path_mm, url_mm)
+download_and_format_ccre(mcg_ccre_path_hg, url_hg)
+download_and_format_ccre(mcg_ccre_path_mm, url_mm)
