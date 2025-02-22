@@ -4,41 +4,78 @@
 library(tidyverse)
 library(pheatmap)
 library(GenomicRanges)
+library(ggrepel)
 source("R/00_config.R")
 source("R/utils/vector_comparison_functions.R")
 
+# Gene tables
 tfs_hg <- read.delim(tfs_hg_path)
 tfs_mm <- read.delim(tfs_mm_path)
+pc_ortho <- read.delim(pc_ortho_path)
 
+# Aggregate microglia coexpression
 agg_hg <- readRDS("~/mcgdat/Cormats/Hg_pcor/aggregate_cormat_FZ_hg.RDS")
 agg_mm <- readRDS("~/mcgdat/Cormats/Mm_pcor/aggregate_cormat_FZ_mm.RDS")
 
-
+# Microglia cCREs
 ccre_hg <- read.delim(mcg_ccre_path_hg)
 ccre_mm <- read.delim(mcg_ccre_path_mm)
+
+# Unibind chip-seq experiments as GR objects
+bind_gr_path_hg <- "/space/scratch/amorin/R_objects/unibind_grlist_perm_human.RDS"
+bind_gr_path_mm <- "/space/scratch/amorin/R_objects/unibind_grlist_perm_mouse.RDS"
+bind_gr_hg <- readRDS(bind_gr_path_hg)
+bind_gr_mm <- readRDS(bind_gr_path_mm)
+
+# Bind matrices and metadata
+# TODO: bind dat necessary?
+# bind_dat_path <- "/space/scratch/amorin/R_objects/processed_unibind_data.RDS"
+# bind_dat <- readRDS(bind_dat_path)
+bind_meta <- readRDS("/space/scratch/amorin/R_objects/Unibind_metadata.RDS")
+
 
 # List of gene count measurement summaries
 count_summ <- readRDS(mcg_count_summ_list_path)
 
-# Keep only cCRE-associated genes also found in aggregate (from refseq protein coding)
-ccre_only_hg <- setdiff(ccre_hg$Symbol, colnames(agg_hg$Agg_mat))
-ccre_only_mm <- setdiff(ccre_mm$Symbol, colnames(agg_mm$Agg_mat))
-
-common_hg <- intersect(ccre_hg$Symbol, colnames(agg_hg$Agg_mat))
-common_mm <- intersect(ccre_mm$Symbol, colnames(agg_mm$Agg_mat))
-
-ccre_hg <- filter(ccre_hg, Symbol %in% common_hg)
-ccre_mm <- filter(ccre_mm, Symbol %in% common_mm)
 
 
+# Setup
+# ------------------------------------------------------------------------------
+
+# Keep only cCRE-associated genes also found in filtered aggregate
+common_hg <- intersect(ccre_hg$Symbol, count_summ$Human$Filter_genes)
+common_mm <- intersect(ccre_mm$Symbol, count_summ$Mouse$Filter_genes)
+ccre_only_hg <- setdiff(ccre_hg$Symbol, count_summ$Human$Filter_genes)
+ccre_only_mm <- setdiff(ccre_mm$Symbol, count_summ$Mouse$Filter_genes)
+
+# TFs that are measured in microglia
 keep_tfs_hg <- intersect(tfs_hg$Symbol, count_summ$Human$Filter_genes)
 keep_tfs_mm <- intersect(tfs_mm$Symbol, count_summ$Mouse$Filter_genes)
 
+# The same cCRE ID can be associated to multiple genes AND the same gene more
+# than once (differing start sites). Remove cases where the same gene is linked
+# to the same cCRE multiple times
+ccre_filt_hg <- ccre_hg %>% 
+  filter(Symbol %in% common_hg) %>% 
+  distinct(Symbol, cCRE_ID, .keep_all = TRUE)
 
-# count(ccre_hg, Symbol) %>% arrange(desc(n))
-# count(ccre_mm, Symbol) %>% arrange(desc(n))
+ccre_filt_mm <- ccre_mm %>% 
+  filter(Symbol %in% common_mm) %>% 
+  distinct(Symbol, cCRE_ID, .keep_all = TRUE)
+
+# Which cCRE genes exist in both species
+ccre_ortho <- filter(pc_ortho, Symbol_hg %in% common_hg & Symbol_mm %in% common_mm)
+tfs_ortho <- filter(pc_ortho, Symbol_hg %in% keep_tfs_hg & Symbol_mm %in% keep_tfs_mm)
 
 
+# Bind GR objects align with metadata (for extracting TF symbols)
+stopifnot(identical(names(bind_gr_hg), bind_meta$Permissive_hg$File))
+stopifnot(identical(names(bind_gr_mm), bind_meta$Permissive_mm$File))
+
+
+
+# Associating each cCRE gene with its top coexpressed TFs
+# ------------------------------------------------------------------------------
 
 
 # Binary matrix of whether or not a TF was in the top 10 coexpressed TFs per gene
@@ -82,6 +119,9 @@ never_tfs_mm <- names(which(order_tfs_mm == 0))
 top_tfs_mat_hg <- top_tfs_mat_hg[setdiff(names(order_tfs_hg), never_tfs_hg), ]
 top_tfs_mat_mm <- top_tfs_mat_mm[setdiff(names(order_tfs_mm), never_tfs_mm), ]
 
+plot(density(order_tfs_hg[rownames(top_tfs_mat_hg)]), main = "Human", xlab = "Count of genes")
+plot(density(order_tfs_mm[rownames(top_tfs_mat_mm)]), main = "Mouse", xlab = "Count of genes")
+
 
 pheatmap(top_tfs_mat_hg,
          cluster_rows = FALSE,
@@ -89,6 +129,7 @@ pheatmap(top_tfs_mat_hg,
          col = c("white", "black"),
          show_rownames = FALSE,
          show_colnames = FALSE)
+
 
 pheatmap(top_tfs_mat_mm,
          cluster_rows = FALSE,
@@ -118,8 +159,10 @@ plot(order_tfs_mm[keep_tfs_mm], avg_tfs_mm[keep_tfs_mm])
 
 
 # cCRE as Granges. Proximal == gene promoter, distal == assumed enhancer.
+# ------------------------------------------------------------------------------
 
-ccre_gr_hg <- ccre_hg %>% 
+
+ccre_gr_hg <- ccre_filt_hg %>% 
   dplyr::rename(
     Chromosome = Chromosome_distal,
     Start = Start_distal,
@@ -127,7 +170,7 @@ ccre_gr_hg <- ccre_hg %>%
   makeGRangesFromDataFrame(keep.extra.columns = TRUE)
 
 
-ccre_gr_mm <- ccre_mm %>% 
+ccre_gr_mm <- ccre_filt_mm %>% 
   dplyr::rename(
     Chromosome = Chromosome_distal,
     Start = Start_distal,
@@ -162,13 +205,483 @@ ccre_link_distance <- function(ccre) {
 }
 
 
-link_dist_hg <- ccre_link_distance(ccre_hg)
-link_dist_mm <- ccre_link_distance(ccre_mm)
+link_dist_hg <- ccre_link_distance(ccre_filt_hg)
+link_dist_mm <- ccre_link_distance(ccre_filt_mm)
 
 
 
 hist(log10(link_dist_hg + 1), breaks = 100, xlim = c(0, 7))
 hist(log10(link_dist_mm + 1), breaks = 100, xlim = c(0, 7))
+
+
+# Counting number of genes and cCREs per gene
+n_ccre_genes_hg <- n_distinct(ccre_filt_hg$Symbol)
+n_ccre_genes_mm <- n_distinct(ccre_filt_mm$Symbol)
+n_ccre_per_gene_hg <- dplyr::count(ccre_filt_hg, Symbol) %>% arrange(desc(n))
+n_ccre_per_gene_mm <- dplyr::count(ccre_filt_mm, Symbol) %>% arrange(desc(n))
+n_gene_per_ccre_hg <- dplyr::count(ccre_filt_hg, cCRE_ID) %>% arrange(desc(n))
+n_gene_per_ccre_mm <- dplyr::count(ccre_filt_mm, cCRE_ID) %>% arrange(desc(n))
+
+
+ggplot(n_ccre_per_gene_hg, aes(x = n)) +
+  geom_histogram(bins = 30) +
+  xlab("Count of cCREs per gene") +
+  ylab("Count of genes") +
+  ggtitle("Human") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+ggplot(n_ccre_per_gene_mm, aes(x = n)) +
+  geom_histogram(bins = 30) +
+  xlab("Count of cCREs per gene") +
+  ylab("Count of genes") +
+  ggtitle("Mouse") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+ggplot(n_gene_per_ccre_hg, aes(x = n)) +
+  geom_histogram(bins = 30) +
+  xlab("Count of genes per cCRE") +
+  ylab("Count of cCREs") +
+  ggtitle("Human") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+ggplot(n_gene_per_ccre_mm, aes(x = n)) +
+  geom_histogram(bins = 30) +
+  xlab("Count of genes per cCRE") +
+  ylab("Count of cCREs") +
+  ggtitle("Mouse") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+
+# Are cCRE_associated genes typically well expressed?
+left_join(n_ccre_per_gene_hg, count_summ$Human$Summ_df, by = "Symbol") %>% 
+  filter(Symbol %in% count_summ$Human$Filter_genes) %>% 
+  ggplot(., aes(x = n, y = QN_avg)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  xlab("Count of linked cCREs") +
+  ylab("Mean log2 CPM") +
+  ggtitle("Human") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+left_join(n_ccre_per_gene_mm, count_summ$Mouse$Summ_df, by = "Symbol") %>% 
+  filter(Symbol %in% count_summ$Mouse$Filter_genes) %>% 
+  ggplot(., aes(x = n, y = QN_avg)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  xlab("Count of linked cCREs") +
+  ylab("Mean log2 CPM") +
+  ggtitle("Mouse") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+
+# Overlap ChIP-seq and cCREs
+# ------------------------------------------------------------------------------
+
+
+# Focus on SPI1: mouse has microglia data, human does not
+
+tf_hg <- "SPI1"
+tf_mm <- "Spi1"
+
+
+all_tf_ids_hg <- bind_meta$Permissive_hg %>% 
+  filter(Symbol == tf_hg) %>% 
+  pull(File)
+
+
+mcg_tf_ids_mm <- bind_meta$Permissive_mm %>% 
+  filter(str_to_title(Symbol) == tf_mm & str_detect(ID, ".*microglia.*")) %>% 
+  pull(File)
+
+
+all_tf_ids_mm <- bind_meta$Permissive_mm %>% 
+  filter(str_to_title(Symbol) == tf_mm) %>% 
+  pull(File)
+
+
+nonmcg_tf_ids_mm <- setdiff(all_tf_ids_mm, mcg_tf_ids_mm)
+
+
+
+tf_ol_hg <- findOverlaps(ccre_gr_hg, GRangesList(bind_gr_hg[all_tf_ids_hg]))
+tf_ol_mm <- findOverlaps(ccre_gr_mm, GRangesList(bind_gr_mm[all_tf_ids_mm]))
+tf_mcg_ol_mm <- findOverlaps(ccre_gr_mm, GRangesList(bind_gr_mm[mcg_tf_ids_mm]))
+tf_nonmcg_ol_mm <- findOverlaps(ccre_gr_mm, GRangesList(bind_gr_mm[nonmcg_tf_ids_mm]))
+
+
+# Get the cCRE-genes links that overlap each bind experiment
+extract_ol_ccre_genes <- function(ol, ccre, ids) {
+  
+  ix_ccre <- as.integer(ol@from)
+  ix_bind <- as.integer(ol@to)
+  
+  data.frame(Symbol = ccre$Symbol[ix_ccre], 
+             cCRE = ccre$cCRE_ID[ix_ccre],
+             Bind = ids[ix_bind]) 
+  
+}
+
+
+# Summarize how many cCREs were bound for each gene
+summarize_ccre_binding <- function(ol, ccre, ids) {
+  
+  ol_table <- extract_ol_ccre_genes(ol, ccre, ids)
+  n_ccre <- dplyr::count(ccre, Symbol)
+  
+  summ_df <- ol_table %>% 
+    group_by(Symbol) %>%
+    dplyr::summarise(
+      N_cCRE_bound = n_distinct(cCRE),
+      N_total_ol = length(Bind)) %>% 
+    left_join(n_ccre, by = "Symbol") %>% 
+    dplyr::rename("N_cCRE_total" = "n") %>% 
+    mutate(Avg_ol_per_cCRE = N_total_ol / N_cCRE_total) %>% 
+    relocate(N_cCRE_total, .after = Symbol) %>% 
+    mutate(Prop_cCRE_bound = N_cCRE_bound / N_cCRE_total)
+  
+  return(list(Overlap_table = ol_table, Summary = summ_df))
+  
+}
+
+
+ol_summ_hg <- summarize_ccre_binding(tf_ol_hg, ccre_filt_hg, all_tf_ids_hg)
+ol_summ_mm <- summarize_ccre_binding(tf_ol_mm, ccre_filt_mm, all_tf_ids_mm)
+ol_summ_mcg_mm <- summarize_ccre_binding(tf_mcg_ol_mm, ccre_filt_mm, mcg_tf_ids_mm)
+
+
+# Genes w/o any overlap
+setdiff(common_hg, ol_summ_hg$Summary$Symbol)
+setdiff(common_mm, ol_summ_mm$Summary$Symbol)
+
+
+ggplot(ol_summ_hg$Summary, aes(x = Prop_cCRE_bound, y = Avg_ol_per_cCRE)) +
+  geom_point(shape = 21, size = 2.4) +
+  xlab("Proportion of cCREs that are bound") +
+  ylab("Mean overlap per cCRE") +
+  ggtitle("Human") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+
+ggplot(ol_summ_mm$Summary, aes(x = Prop_cCRE_bound, y = Avg_ol_per_cCRE)) +
+  geom_point(shape = 21, size = 2.4) +
+  xlab("Proportion of cCREs that are bound") +
+  ylab("Mean overlap per cCRE") +
+  ggtitle("Mouse") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+
+# Relate bound cCRE-genes to agg coexpr
+# ------------------------------------------------------------------------------
+
+
+ready_all_df <- function(agg_mat, 
+                         keep_genes, 
+                         ccre_genes, 
+                         ortho_ccre_genes, 
+                         tf, 
+                         ol_summ) {
+  
+  data.frame(
+    Symbol = keep_genes,
+    FZ = agg_mat[keep_genes, tf]
+  ) %>%
+    filter(Symbol != tf) %>%
+    left_join(ol_summ, by = "Symbol") %>%
+    mutate(
+      cCRE_gene = Symbol %in% ccre_genes,
+      cCRE_ortho_gene = Symbol %in% c(ortho_ccre_genes$Symbol_hg, 
+                                      ortho_ccre_genes$Symbol_mm),
+      Has_bind = !is.na(N_cCRE_bound),
+      Group = case_when(
+        cCRE_ortho_gene & Has_bind ~ "cCRE(+) Ortho(+) Bind(+)",
+        cCRE_ortho_gene & !Has_bind ~ "cCRE(+) Ortho(+) Bind(-)",
+        !cCRE_ortho_gene & Has_bind ~ "cCRE(+) Ortho(-) Bind(+)",
+        !cCRE_ortho_gene & cCRE_gene & !Has_bind ~ "cCRE(+) Ortho(-) Bind(-)",
+        .default = "cCRE(-)")
+      ) %>%
+    replace(is.na(.), 0)
+}
+
+
+
+
+all_df_hg <- ready_all_df(
+  agg_mat = agg_hg$Agg_mat,
+  keep_genes = count_summ$Human$Filter_genes,
+  ccre_genes = common_hg,
+  ortho_ccre_genes = ccre_ortho,
+  tf = tf_hg,
+  ol_summ = ol_summ_hg$Summary
+)
+
+
+all_df_mm <- ready_all_df(
+  agg_mat = agg_mm$Agg_mat,
+  keep_genes = count_summ$Mouse$Filter_genes,
+  ccre_genes = common_mm,
+  ortho_ccre_genes = ccre_ortho,
+  tf = tf_mm,
+  ol_summ = ol_summ_mm$Summary
+)
+
+
+mcg_df_mm <- ready_all_df(
+  agg_mat = agg_mm$Agg_mat,
+  keep_genes = count_summ$Mouse$Filter_genes,
+  ccre_genes = common_mm,
+  ortho_ccre_genes = ccre_ortho,
+  tf = tf_mm,
+  ol_summ = ol_summ_mcg_mm$Summary
+)
+
+
+
+# Scatter plots of agg coexpr ~ average bound ccres
+ggplot(all_df_hg, aes(x = Avg_ol_per_cCRE, y = FZ)) +
+  geom_point(shape = 21, size = 2.4) +
+  geom_smooth(method = "lm") +
+  xlab("Average overlaps per cCRE") +
+  ylab("Aggregate SPI1 coexpression") +
+  ggtitle("Human") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+ggplot(all_df_mm, aes(x = Avg_ol_per_cCRE, y = FZ)) +
+  geom_point(shape = 21, size = 2.4) +
+  geom_smooth(method = "lm") +
+  xlab("Average overlaps per cCRE") +
+  ylab("Aggregate SPI1 coexpression") +
+  ggtitle("Mouse (all SPI ChIP-seq)") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+ggplot(mcg_df_mm, aes(x = Avg_ol_per_cCRE, y = FZ)) +
+  geom_point(shape = 21, size = 2.4) +
+  geom_smooth(method = "lm") +
+  xlab("Average overlaps per cCRE") +
+  ylab("Aggregate SPI1 coexpression") +
+  ggtitle("Mouse (microglia ChIP-seq)") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+
+# Boxplots binarizing binding-ccre status
+ggplot(all_df_hg, aes(x = Has_bind, y = FZ)) +
+  geom_violin(fill = "slategrey") +
+  geom_boxplot(width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab(">=1 SPI1-bound cCRE") +
+  ylab("Aggregate SPI1 coexpression") +
+  ggtitle("Human") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+ggplot(all_df_mm, aes(x = cCRE_ortho_gene, y = FZ)) +
+  geom_violin(fill = "slategrey") +
+  geom_boxplot(width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  # xlab(">=1 SPI1-bound cCRE") +
+  ylab("Aggregate SPI1 coexpression") +
+  ggtitle("Mouse (all ChIP-seq)") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+ggplot(mcg_df_mm, aes(x = Group, y = FZ)) +
+  geom_violin(fill = "slategrey") +
+  geom_boxplot(width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  # xlab(">=1 SPI1-bound cCRE") +
+  ylab("Aggregate SPI1 coexpression") +
+  ggtitle("Mouse (microglia ChIP-seq)") +
+  theme_classic() +
+  theme(text = element_text(size = 25),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(size = 18))
+
+
+
+
+top_targets_all_hg <- all_df_hg %>% 
+  filter(Group == "cCRE(+) Ortho(+) Bind(+)") %>% 
+  arrange(desc(FZ)) 
+rownames(top_targets_all_hg) <- top_targets_all_hg$Symbol
+
+top_targets_all_mm <- all_df_mm %>% 
+  filter(Group == "cCRE(+) Ortho(+) Bind(+)") %>% 
+  arrange(desc(FZ))
+rownames(top_targets_all_mm) <- top_targets_all_mm$Symbol
+
+top_targets_mcg_mm <- mcg_df_mm %>% 
+  filter(Group == "cCRE(+) Ortho(+) Bind(+)") %>% 
+  arrange(desc(FZ))
+rownames(top_targets_mcg_mm) <- top_targets_mcg_mm$Symbol
+
+
+
+top_targets_ortho <- ccre_ortho %>% 
+  filter(Symbol_hg %in% top_targets_all_hg$Symbol & 
+         Symbol_mm %in% top_targets_mcg_mm$Symbol)
+
+
+top_targets_ortho <- data.frame(
+  Symbol = top_targets_ortho$Symbol_hg,
+  FZ_hg = top_targets_all_hg[top_targets_ortho$Symbol_hg, "FZ"],
+  FZ_mm = top_targets_all_mm[top_targets_ortho$Symbol_mm, "FZ"]
+) %>% 
+  mutate(
+    FZ_ortho = rowMeans(.[, c("FZ_hg", "FZ_mm")]),
+    Group = Symbol %in% slice_max(., FZ_ortho, n = 10)$Symbol
+  )
+
+
+
+
+px <- 
+  ggplot(top_targets_ortho, aes(x = FZ_hg, y = FZ_mm)) +
+  geom_point(shape = 21, size = 2.4, colour = "black", fill = "slategrey", alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "firebrick") +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "firebrick") +
+  geom_text_repel(data = filter(top_targets_ortho, Group),
+                  aes(label = Symbol),
+                  size = 9) +
+  ylab("Aggregate mouse coexpression (n=44)") +
+  xlab("Aggregate human coexpression (n=18)") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+
+
+ggsave(px, dpi = 300, device = "png", height = 8, width = 8,
+       filename = file.path(plot_dir, "microglia_ccre_spi_coexpr.png"))
+
+
+
+
+
+mcg_dat <- readRDS(mcg_dat_path)
+mcg_meta <- read.delim(mcg_meta_dedup_path, stringsAsFactors = FALSE)
+ids_mm <- filter(mcg_meta, Species == "Mouse")$ID
+ids_hg <- filter(mcg_meta, Species == "Human")$ID
+
+
+gene_hg <- "COCO1A"
+gene_mm <- filter(pc_ortho, Symbol_hg == gene_hg)$Symbol_mm
+
+
+
+cor_l <- lapply(names(mcg_dat), function(x) {
+  
+  if (x %in% ids_hg) {
+    cor(mcg_dat[[x]]$Mat[tf_hg, ], mcg_dat[[x]]$Mat[gene_hg, ])
+  } else {
+    cor(mcg_dat[[x]]$Mat[tf_mm, ], mcg_dat[[x]]$Mat[gene_mm, ])
+  }
+  
+})
+names(cor_l) <- names(mcg_dat)
+
+
+
+cor_vec <- sort(unlist(cor_l))
+
+cor_anno <- mcg_meta %>% filter(ID %in% names(cor_vec)) %>% select(Species)
+rownames(cor_anno) <- names(cor_vec)
+
+
+pheatmap(t(cor_vec), 
+         cluster_rows = FALSE,
+         cluster_cols = FALSE, 
+         annotation_col = cor_anno,
+         color = rev(c('#67001f','#b2182b','#d6604d','#f4a582','#fddbc7','#f7f7f7','#d1e5f0','#92c5de','#4393c3','#2166ac','#053061')),
+         breaks = seq(from = -0.3, to = 0.3, length.out = 11),
+         border_color = NA,
+         annotation_colors = list(Species = c(Human = "royalblue", Mouse = "goldenrod")))
+
+
+
+p_l <- lapply(names(mcg_dat), function(x) {
+  
+  if (x %in% ids_hg) {
+    df <- data.frame(TF = mcg_dat[[x]]$Mat[tf_hg, ], 
+                     Gene = mcg_dat[[x]]$Mat[gene_hg, ])
+  } else {
+    df <- data.frame(TF = mcg_dat[[x]]$Mat[tf_mm, ], 
+                     Gene = mcg_dat[[x]]$Mat[gene_mm, ])
+  }
+  
+  ggplot(df, aes(x = TF, y = Gene)) +
+    geom_point(shape = 21, size = 2.4, alpha = 0.6) +
+    labs(title = x, x = tf_hg, y = gene_hg) +
+    theme_classic() +
+    theme(text = element_text(size = 25))
+
+})
+names(p_l) <- names(mcg_dat)
+
+
+
+
+
+get_gene_ccre <- function(ol_summ, gene, ccre) {
+  
+  bound_ids <- ol_summ$Overlap_table %>% 
+    filter(Symbol == gene) %>% 
+    pull(cCRE) %>% 
+    unique() 
+  
+  bound_ccre <- filter(ccre, cCRE_ID %in% bound_ids & Symbol == gene)
+  
+  return(bound_ccre)
+}
+
+
+get_gene_ccre(ol_summ_hg, gene_hg, ccre_hg)
+get_gene_ccre(ol_summ_mm, gene_mm, ccre_mm)
+
+
+
+
+
+# Here, exploring the overlap of all experiments
+# global_ol_hg <- findOverlaps(ccre_gr_hg, GRangesList(bind_gr_hg))
+# global_ol_mm <- findOverlaps(ccre_gr_mm, GRangesList(bind_gr_mm))
+# 
+# 
+# # Associate cCRE genes to chip-seq TRs
+# ol_ccre_genes_hg <- mclapply(unique(all_ol_hg@from), function(x) {
+#   ix <- all_ol_hg[all_ol_hg@from == x]@to
+#   unique(bind_meta$Permissive_hg[ix, "Symbol"])
+# }, mc.cores = ncore)
+# names(ol_ccre_genes_hg) <- ccre_hg$Symbol[unique(all_ol_hg@from)]
+# 
+# 
+# ol_ccre_genes_mm <- mclapply(unique(all_ol_mm@from), function(x) {
+#   ix <- all_ol_mm[all_ol_mm@from == x]@to
+#   unique(bind_meta$Permissive_mm[ix, "Symbol"])
+# }, mc.cores = ncore)
+# names(ol_ccre_genes_mm) <- ccre_mm$Symbol[unique(all_ol_mm@from)]
+
 
 
 
