@@ -66,11 +66,17 @@ mcg_meta_path <- file.path(data_out_dir, "microglia_metadata.tsv")
 mcg_meta_dedup_path <- file.path(data_out_dir, "microglia_metadata_dedup.tsv")
 macro_meta_path <- file.path(data_out_dir, "macrophage_metadata.tsv")
 macro_meta_dedup_path <- file.path(data_out_dir, "macrophage_metadata_dedup.tsv")
+neuron_meta_path <- "/space/scratch/amorin/aggregate_microglia/neuron_metadata.tsv"
+neuron_meta_dedup_path <- "/space/scratch/amorin/aggregate_microglia/neuron_metadata_dedup.tsv"
+astro_meta_path <- "/space/scratch/amorin/aggregate_microglia/astrocyte_metadata.tsv"
+astro_meta_dedup_path <- "/space/scratch/amorin/aggregate_microglia/astrocyte_metadata_dedup.tsv"
 
 
 # Microglia list of count matrices and meta
 mcg_dat_path <- file.path(data_out_dir, "microglia_dat_list.RDS")
 macro_dat_path <- file.path(data_out_dir, "macrophage_dat_list.RDS")
+neuron_dat_path <- "/space/scratch/amorin/aggregate_microglia/neuron_dat_list.RDS"
+astro_dat_path <- "/space/scratch/amorin/aggregate_microglia/astrocyte_dat_list.RDS"
 
 
 # Cell correlations per dataset
