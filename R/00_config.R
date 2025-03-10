@@ -5,6 +5,9 @@
 # cores for parallel::
 ncore <- 8
 
+# A gene must be 'measured' in at least this fraction of datasets to keep
+min_msr_frac <- 1/3
+
 
 # Main data output
 data_out_dir <- "/space/scratch/amorin/aggregate_microglia"
@@ -14,20 +17,25 @@ data_out_dir <- "/space/scratch/amorin/aggregate_microglia"
 plot_dir <- "/home/amorin/Plots/aggregate_microglia"
 
 
-# Coexpression and aggregates matrices to these directories
-cmat_dir_hg <- file.path(data_out_dir, "Cormats", "Hg_pcor")
-cmat_dir_mm <- file.path(data_out_dir, "Cormats", "Mm_pcor")
+# Coexpression and aggregates matrices root directory
+cmat_dir <- file.path(data_out_dir, "Cormats")
+cmat_dir_mcg_hg <- file.path(cmat_dir, "Microglia_hg")
+cmat_dir_mcg_mm <- file.path(cmat_dir, "Microglia_mm")
+cmat_dir_macro_hg <- file.path(cmat_dir, "Macrophage_hg")
+cmat_dir_macro_mm <- file.path(cmat_dir, "Macrophage_mm")
 
 
 if (!dir.exists(data_out_dir)) dir.create(data_out_dir)
 if (!dir.exists(plot_dir)) dir.create(plot_dir)
-if (!dir.exists(cmat_dir_hg)) dir.create(cmat_dir_hg)
-if (!dir.exists(cmat_dir_mm)) dir.create(cmat_dir_mm)
+if (!dir.exists(cmat_dir)) dir.create(cmat_dir)
+if (!dir.exists(cmat_dir_mcg_hg)) dir.create(cmat_dir_mcg_hg)
+if (!dir.exists(cmat_dir_mcg_mm)) dir.create(cmat_dir_mcg_mm)
+if (!dir.exists(cmat_dir_macro_hg)) dir.create(cmat_dir_macro_hg)
+if (!dir.exists(cmat_dir_macro_mm)) dir.create(cmat_dir_macro_mm)
 
 
 
-## TODO: These are paths from the TRsc paper, FIX dependency
-## TODO: or, alternatively, Borealis data download link
+### !!!NOTE!!!: These are paths from the TRsc paper
 
 # TRsc metadata
 sc_meta_path <- "/space/grp/amorin/Metadata/single_cell_dataset_meta.tsv"
@@ -88,6 +96,16 @@ mcg_count_summ_list_path <- file.path(data_out_dir, "microglia_gene_count_summar
 mcg_count_summ_table_hg <- file.path(data_out_dir, "microglia_gene_count_summary_table_hg.tsv")
 mcg_count_summ_table_mm <- file.path(data_out_dir, "microglia_gene_count_summary_table_mm.tsv")
 macro_count_summ_list_path <- file.path(data_out_dir, "macrophage_gene_count_summary_list.RDS")
+
+
+# Lists of aggregate coexpression and NA tracking matrices
+mcg_fz_hg_path <- file.path(cmat_dir_mcg_hg, "aggregate_cormat_FZ_microglia_hg.RDS")
+mcg_allrank_hg_path <- file.path(cmat_dir_mcg_hg, "aggregate_cormat_allrank_microglia_hg.RDS")
+mcg_colrank_hg_path <- file.path(cmat_dir_mcg_hg, "aggregate_cormat_colrank_microglia_hg.RDS")
+mcg_fz_mm_path <- file.path(cmat_dir_mcg_mm, "aggregate_cormat_FZ_microglia_mm.RDS")
+mcg_allrank_mm_path <- file.path(cmat_dir_mcg_mm, "aggregate_cormat_allrank_microglia_mm.RDS")
+mcg_colrank_mm_path <- file.path(cmat_dir_mcg_mm, "aggregate_cormat_colrank_microglia_mm.RDS")
+
 
 
 # Microglia cCREs with region to gene predictions
