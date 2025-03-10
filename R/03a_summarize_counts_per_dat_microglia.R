@@ -1,9 +1,9 @@
-## TODO: Keep genes as stored vector (instead of filtered df?)
+## Summarize the CPM-normalized count data across microglia datasets, saving
+## this info out as a list. Also perform basic exploration of this information.
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
 library(aggtools)
-# library(pheatmap)
 library(ComplexHeatmap)
 library(preprocessCore)
 library(matrixStats)
@@ -48,8 +48,8 @@ summ_mm <- count_summ$Mouse$Summ_df
 
 
 # Min number of experiments a gene needs to be measured in to be kept
-min_exp_hg <- floor(length(ids_hg) * 1/3)
-min_exp_mm <- floor(length(ids_mm) * 1/3)
+min_exp_hg <- floor(length(ids_hg) * min_msr_frac)
+min_exp_mm <- floor(length(ids_mm) * min_msr_frac)
 
 
 
@@ -66,7 +66,8 @@ ortho_df <- pc_ortho %>%
   left_join(summ_mm, by = c("Symbol_mm" = "Symbol"),
             suffix = c("_hg", "_mm"))
 
-  
+
+# Identifying the TFs that are highly expressed in either species  
 label_tfs_hg <- ortho_df %>% 
   filter(Is_TF_hg) %>% 
   slice_max(QN_avg_hg, n = 15)
@@ -74,11 +75,6 @@ label_tfs_hg <- ortho_df %>%
 label_tfs_mm <- ortho_df %>% 
   filter(Is_TF_mm) %>% 
   slice_max(QN_avg_mm, n = 15)
-
-
-# label_tfs <- ortho_df %>% 
-#   filter(Is_TF) %>% 
-#   mutate(Avg = rowMeans(.[, c("QN_avg_hg", "QN_avg_mm")]))
 
 
 label_tfs <- union(label_tfs_hg$Symbol_hg, label_tfs_mm$Symbol_hg)
@@ -90,23 +86,41 @@ ortho_df_filt <- ortho_df %>%
          Is_top_TF = Symbol_hg %in% label_tfs)
 
 
-
-cor(ortho_df_filt$QN_avg_mm, ortho_df_filt$QN_avg_hg)
-
-
-cor(ortho_df_filt[ortho_df_filt$Is_TF, "QN_avg_mm"],
-    ortho_df_filt[ortho_df_filt$Is_TF, "QN_avg_hg"])
+ortho_expr_cor <- cor(ortho_df_filt$QN_avg_mm, ortho_df_filt$QN_avg_hg)
 
 
-cor(ortho_df_filt[!ortho_df_filt$Is_TF, "QN_avg_mm"],
-    ortho_df_filt[!ortho_df_filt$Is_TF, "QN_avg_hg"])
 
-fit <- lm(QN_avg_mm ~ QN_avg_hg + Is_TF, data = ortho_df_filt)
-fit <- lm(QN_avg_hg ~ QN_avg_mm + Is_TF, data = ortho_df_filt)
-summary(fit)
+# Identifying candidate species-specific expression
+label_diff_hg <- ortho_df_filt %>% 
+  slice_min(RP_hg, n = 1000) %>% 
+  slice_max(RP_mm, n = 100) %>% 
+  arrange(desc(QN_avg_hg))
 
 
-ggplot(ortho_df_filt, aes(x = QN_avg_mm, y = QN_avg_hg)) +
+label_diff_mm <- ortho_df_filt %>% 
+  slice_min(RP_mm, n = 1000) %>% 
+  slice_max(RP_hg, n = 100) %>% 
+  arrange(desc(QN_avg_mm))
+
+
+# Add label columns for plotting
+ortho_df_filt <- ortho_df_filt %>% 
+  mutate(
+    Diff_hg = Symbol_hg %in% label_diff_hg$Symbol_hg,
+    Diff_label_hg = Symbol_hg %in% label_diff_hg$Symbol_hg[1:5],
+    Diff_mm = Symbol_hg %in% label_diff_mm$Symbol_hg,
+    Diff_label_mm = Symbol_hg %in% label_diff_mm$Symbol_hg[1:5]
+  )
+
+
+
+
+# Plots
+# ------------------------------------------------------------------------------
+
+
+# Scatter of ortho expression, with trend line and TFs emphasized
+p1a <- ggplot(ortho_df_filt, aes(x = QN_avg_mm, y = QN_avg_hg)) +
   geom_point(data = filter(ortho_df_filt, !Is_TF),
              shape = 21, size = 2.4, alpha = 0.2) +
   geom_point(data = filter(ortho_df_filt, Is_TF),
@@ -119,9 +133,8 @@ ggplot(ortho_df_filt, aes(x = QN_avg_mm, y = QN_avg_hg)) +
         plot.margin = margin(c(10, 20, 10, 10)))
 
 
-
-
-ggplot(ortho_df_filt, aes(x = QN_avg_mm, y = QN_avg_hg)) +
+# Scatter of ortho expression, with top TFs labeled
+p1b <- ggplot(ortho_df_filt, aes(x = QN_avg_mm, y = QN_avg_hg)) +
   geom_point(data = filter(ortho_df_filt, !Is_TF), 
              shape = 21, size = 2.4, alpha = 0.2) +
   geom_point(data = filter(ortho_df_filt, Is_TF), 
@@ -136,31 +149,8 @@ ggplot(ortho_df_filt, aes(x = QN_avg_mm, y = QN_avg_hg)) +
         plot.margin = margin(c(10, 20, 10, 10)))
 
 
-
-label_diff_hg <- ortho_df_filt %>% 
-  slice_min(RP_hg, n = 1000) %>% 
-  slice_max(RP_mm, n = 100) %>% 
-  arrange(desc(QN_avg_hg))
-
-
-label_diff_mm <- ortho_df_filt %>% 
-  slice_min(RP_mm, n = 1000) %>% 
-  slice_max(RP_hg, n = 100) %>% 
-  arrange(desc(QN_avg_mm))
-
-
-
-ortho_df_filt <- ortho_df_filt %>% 
-  mutate(
-    Diff_hg = Symbol_hg %in% label_diff_hg$Symbol_hg,
-    Diff_label_hg = Symbol_hg %in% label_diff_hg$Symbol_hg[1:5],
-    Diff_mm = Symbol_hg %in% label_diff_mm$Symbol_hg,
-    Diff_label_mm = Symbol_hg %in% label_diff_mm$Symbol_hg[1:5]
-  )
-
-
-
-ggplot(ortho_df_filt, aes(x = QN_avg_mm, y = QN_avg_hg)) +
+# Scatter of ortho expression labelling species-specific expression
+p1c <- ggplot(ortho_df_filt, aes(x = QN_avg_mm, y = QN_avg_hg)) +
   geom_point(data = filter(ortho_df_filt, !Diff_hg & !Diff_mm), 
              shape = 21, size = 2.4, alpha = 0.2) +
   geom_point(data = filter(ortho_df_filt, Diff_hg), 
@@ -178,19 +168,9 @@ ggplot(ortho_df_filt, aes(x = QN_avg_mm, y = QN_avg_hg)) +
 
 
 
-
-
-
-
-# Plots
-# ------------------------------------------------------------------------------
-
-
-
-
-
-
-ggplot(summ_hg, aes(x = N_msr, y = QN_avg)) +
+# Plotting the averaged+pseudobulked+quantile norm'd expression vs count msr'd,
+# overlaid with line indicating min msr'd count filter
+p2a <- ggplot(summ_hg, aes(x = N_msr, y = QN_avg)) +
   geom_point(shape = 21, size = 2.4) +
   geom_vline(xintercept = min_exp_hg - 0.5, 
              colour = "firebrick", 
@@ -202,8 +182,8 @@ ggplot(summ_hg, aes(x = N_msr, y = QN_avg)) +
   theme(text = element_text(size = 25))
 
 
-
-ggplot(summ_mm, aes(x = N_msr, y = QN_avg)) +
+# Mouse
+p2b <- ggplot(summ_mm, aes(x = N_msr, y = QN_avg)) +
   geom_point(shape = 21, size = 2.4) +
   geom_vline(xintercept = min_exp_mm - 0.5, 
              colour = "firebrick", 
@@ -216,24 +196,7 @@ ggplot(summ_mm, aes(x = N_msr, y = QN_avg)) +
 
 
 
-# Hists of average expression and msr
-
-hist(summ_hg$QN_avg, breaks = 1000)
-hist(summ_hg[count_summ$Human$Filter_genes, "QN_avg"], breaks = 1000)
-
-hist(summ_hg$N_msr, breaks = 1000)
-abline(v = (floor(length(ids_hg) * 1/3) - 0.5), col = "red")
-
-
-hist(summ_mm$QN_avg, breaks = 1000)
-hist(summ_mm[count_summ$Mouse$Filter_genes, "QN_avg"], breaks = 1000)
-
-hist(summ_mm$N_msr, breaks = 1000)
-abline(v = (floor(length(ids_mm) * 1/3) - 0.5), col = "red")
-
-
-
-# Vbplot of counts for given gene
+# Violin+box plot of CPM counts for given gene
 
 
 vbplot <- function(dat_l, gene) {
@@ -265,23 +228,24 @@ vbplot <- function(dat_l, gene) {
 # The max average gene
 max_hg <- slice_max(summ_hg, QN_avg, n = 1) %>% pull(Symbol)
 max_mm <- slice_max(summ_mm, QN_avg, n = 1) %>% pull(Symbol)
-vbplot(dat_l[ids_hg], max_hg)
-vbplot(dat_l[ids_mm], max_mm)
+p3a <- vbplot(dat_l[ids_hg], max_hg)
+p3b <- vbplot(dat_l[ids_mm], max_mm)
 
 # The lowest average gene that was kept
 low_hg <- summ_hg %>% filter(Symbol %in% count_summ$Human$Filter_genes) %>% slice_min(QN_avg) %>% pull(Symbol)
 low_mm <- summ_mm %>% filter(Symbol %in% count_summ$Mouse$Filter_genes) %>% slice_min(QN_avg) %>% pull(Symbol)
-vbplot(dat_l[ids_hg], low_hg)
-vbplot(dat_l[ids_mm], low_mm)
+p3c <- vbplot(dat_l[ids_hg], low_hg)
+p3d <- vbplot(dat_l[ids_mm], low_mm)
 
 # The highest average gene that was removed
 rm_hg <- summ_hg %>% filter(Symbol %!in% count_summ$Human$Filter_genes) %>% slice_max(QN_avg, n = 1) %>% pull(Symbol)
 rm_mm <- summ_mm %>% filter(Symbol %!in% count_summ$Mouse$Filter_genes) %>% slice_max(QN_avg, n = 1) %>% pull(Symbol)
-vbplot(dat_l[ids_hg], rm_hg)
-vbplot(dat_l[ids_mm], rm_mm)
+p3e <- vbplot(dat_l[ids_hg], rm_hg)
+p3f <- vbplot(dat_l[ids_mm], rm_mm)
 
 
-# Plotting average expression of counts
+
+# Heatmap of average expression of counts
 
 plot_avg_heatmap <- function(summ_l) {
   
@@ -308,6 +272,7 @@ plot_avg_heatmap <- function(summ_l) {
 }
 
 
+# Human
 png(height = 9, width = 7.5, units = "in", res = 300,
     file = file.path(plot_dir, "avg_measurement_heatmap_human.png"))
 
@@ -315,7 +280,7 @@ plot_avg_heatmap(count_summ$Human)
 
 dev.off()
 
-
+# Mouse
 png(height = 6, width = 9, units = "in", res = 300,
     file = file.path(plot_dir, "avg_measurement_heatmap_mouse.png"))
 
@@ -324,51 +289,43 @@ plot_avg_heatmap(count_summ$Mouse)
 dev.off()
 
 
+# Heatmap of binary measurement, with bar plot counting measurement across data
+
+
+plot_msr_heatmap <- function(summ_l) {
+  
+  plot_mat <- summ_l$Msr * 1  # logical -> integer
+  order_genes <- summ_l$Summ_df %>% arrange(desc(N_msr)) %>% pull(Symbol)
+  plot_mat <- plot_mat[order_genes, ]
+  
+  bar <- rowAnnotation(N_msr = anno_barplot(summ_l$Summ_df[order_genes, "N_msr"]))
+  cols <- c("white", "black")
+  
+  Heatmap(plot_mat,
+          cluster_rows = FALSE,
+          cluster_columns = FALSE,
+          show_row_names = FALSE,
+          name = "Measurement", 
+          col = cols,
+          right_annotation = bar,
+          use_raster = TRUE)
+}
 
 
 
-plot_mat <- count_summ$Human$Msr * 1
-order_genes <- summ_hg %>% arrange(desc(N_msr)) %>% pull(Symbol)
-plot_mat <- plot_mat[order_genes, ]
-
-bar_hg <- rowAnnotation(N_msr = anno_barplot(summ_hg[order_genes, "N_msr"]))
-cols <- c("white", "black")
-
+# Human
 png(height = 9, width = 7.5, units = "in", res = 300,
     file = file.path(plot_dir, "binary_measurement_heatmap_human.png"))
 
-Heatmap(plot_mat,
-        cluster_rows = FALSE,
-        cluster_columns = FALSE,
-        show_row_names = FALSE,
-        name = "Measurement", 
-        col = cols,
-        right_annotation = bar_hg,
-        use_raster = TRUE)
+plot_msr_heatmap(count_summ$Human)
 
 dev.off()
 
 
-
-
-plot_mat <- count_summ$Mouse$Msr * 1
-order_genes <- summ_mm %>% arrange(desc(N_msr)) %>% pull(Symbol)
-plot_mat <- plot_mat[order_genes, ]
-
-bar_mm <- rowAnnotation(N_msr = anno_barplot(summ_mm[order_genes, "N_msr"]))
-cols <- c("white", "black")
-
-png(height = 6, width = 9, units = "in", res = 300,
+# Mouse
+png(height = 9, width = 9, units = "in", res = 300,
     file = file.path(plot_dir, "binary_measurement_heatmap_mouse.png"))
 
-Heatmap(plot_mat,
-        cluster_rows = FALSE,
-        cluster_columns = FALSE,
-        show_row_names = FALSE,
-        name = "Measurement", 
-        col = cols,
-        right_annotation = bar_mm,
-        use_raster = TRUE)
+plot_msr_heatmap(count_summ$Mouse)
 
 dev.off()
-
