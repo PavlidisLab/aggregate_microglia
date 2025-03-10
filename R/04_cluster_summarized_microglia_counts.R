@@ -1,8 +1,11 @@
-## Experiment similarity/clustering
+## Each microglia dataset can be represented as a pseuodbulked vector. Exploring
+## the similarity/clustering these datasets
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
 library(pheatmap)
+library(cluster)
+library(viridis)
 source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/vector_comparison_functions.R")
@@ -16,21 +19,14 @@ ids_mm <- unique(filter(mcg_meta, Species == "Mouse")$ID)
 # List of measurement info to keep filtered genes
 count_summ <- readRDS(mcg_count_summ_list_path)
 
-# Gene by dataset average log2 CPM matrices
-avg_hg <- count_summ$Human$QN_Avg[count_summ$Human$Filter_genes, ]
-avg_mm <- count_summ$Mouse$QN_Avg[count_summ$Mouse$Filter_genes, ]
 
 
-# Exp-wise similarity
-cor_avg_hg <- cor(avg_hg, method = "spearman")
-cor_avg_mm <- cor(avg_mm, method = "spearman")
+# Functions
+# ------------------------------------------------------------------------------
 
 
-# view(mat_to_df(cor_avg_hg, value = "Cor"))
-# view(mat_to_df(cor_avg_mm, value = "Cor"))
-
-
-# Assumes mat is a dataset-dataset cor matrix
+# Assumes mat is a dataset-dataset correlation matrix; produces a pheatmap. This
+# is also used to extract the hclust object/tree
 
 cor_heatmap <- function(mat) {
   
@@ -49,69 +45,83 @@ cor_heatmap <- function(mat) {
 
 
 
-hm_hg <- cor_heatmap(cor_avg_hg)
-hm_mm <- cor_heatmap(cor_avg_mm)
-
-
-cut_hg <- cutree(hm_hg$tree_row, k = 2)
-cut_mm <- cutree(hm_mm$tree_col, k = 2)
-
-png(height = 10, width = 12, units = "in", res = 300,
-    file = file.path(plot_dir, "mcg_data_cluster_mm.png"))
-hm_mm
-dev.off()
-
-
-png(height = 10, width = 12, units = "in", res = 300,
-    file = file.path(plot_dir, "mcg_data_cluster_hg.png"))
-hm_hg
-dev.off()
-
-# hclust_avg_hg <- hclust(d = as.dist(1 - cor_avg_hg))
-# hclust_avg_mm <- hclust(d = as.dist(1 - cor_avg_mm))
-
-# sil_avg_hg <- cluster::silhouette(cut_hg, as.dist(1 - cor_avg_hg))
-# mean(sil_avg_hg[, "sil_width"])
-# plot(sil_avg_hg)
-# 
-# 
-# sil_avg_mm <- cluster::silhouette(cut_mm, as.dist(1 - cor_avg_mm))
-# mean(sil_avg_mm[, "sil_width"])
-# plot(sil_avg_mm)
-
-
-
-
-# TODO: you have to be more explicit about expected shape in since it calls t()
-# Performs PCA with prcomp and returns list of the resulting 
-# object as well as the variance explained
+# Performs PCA with prcomp and returns list of the resulting object as well as 
+# the variance explained. Assumes features as columns and samples as rows
 
 pca_and_var <- function(mat) {
   
-  # prcomp expects samples as rows, features (genes) as columns so transpose
-  pcmat <- prcomp(t(mat), scale = TRUE)
+  pc_mat <- prcomp(mat, scale = TRUE)
   
   # variance explained by the PCs
-  prc_var <- pcmat$sdev ^ 2
+  prc_var <- pc_mat$sdev ^ 2
   var_explained <- round(prc_var / sum(prc_var) * 100, 2)
   cumvar_explained <- cumsum(var_explained) / sum(var_explained)
   
-  return(list(PC = pcmat, 
+  return(list(PC = pc_mat, 
               Var_explained = var_explained, 
               Cumvar_explained = cumvar_explained))
 }
 
 
 
-pca_hg <- pca_and_var(avg_hg)
-pca_mm <- pca_and_var(avg_mm)
+
+# Generating similarity between datasets
+# ------------------------------------------------------------------------------
 
 
 
+# Isolate gene by dataset average/pseuodbulked log2+quantile norm CPM matrices
+mat_hg <- count_summ$Human$QN_Avg[count_summ$Human$Filter_genes, ]
+mat_mm <- count_summ$Mouse$QN_Avg[count_summ$Mouse$Filter_genes, ]
+
+
+# Experiment-wise spearman's correlation
+cor_mat_hg <- cor(mat_hg, method = "spearman")
+cor_mat_mm <- cor(mat_mm, method = "spearman")
+
+
+# Correlation of experiment pairs as a table
+cor_df_hg <- mat_to_df(cor_mat_hg, value_name = "Cor")
+cor_df_mm <- mat_to_df(cor_mat_mm, value_name = "Cor")
+
+
+# Heatmap object (includes hclust) of experiment correlation
+heatmap_hg <- cor_heatmap(cor_mat_hg)
+heatmap_mm <- cor_heatmap(cor_mat_mm)
+
+
+# Cutting the dendogram produced by pheatmap. k=2 chosen by visual exam.
+cut_hg <- cutree(heatmap_hg$tree_row, k = 2)
+cut_mm <- cutree(heatmap_mm$tree_row, k = 2)
+
+
+# This produces the same hclust as the above pheatmap object
+hclust_mat_hg <- hclust(d = as.dist(1 - cor_mat_hg))
+hclust_mat_mm <- hclust(d = as.dist(1 - cor_mat_mm))
+
+
+# Silhoutte analysis aligns with visual inspection of k=2
+sil_mat_hg <- cluster::silhouette(cut_hg, as.dist(1 - cor_mat_hg))
+# mean(sil_mat_hg[, "sil_width"])
+# plot(sil_mat_hg)
+
+sil_mat_mm <- cluster::silhouette(cut_mm, as.dist(1 - cor_mat_mm))
+# mean(sil_mat_mm[, "sil_width"])
+# plot(sil_mat_mm)
+
+
+
+# PCA: expects samples as rows, features (genes) as columns so must transpose
+pca_hg <- pca_and_var(t(mat_hg))
+pca_mm <- pca_and_var(t(mat_mm))
+
+
+# Isolating first 5 PCs
 pca_df_hg <- data.frame(pca_hg$PC$x[, 1:5]) %>% rownames_to_column(var = "ID")
 pca_df_mm <- data.frame(pca_mm$PC$x[, 1:5]) %>% rownames_to_column(var = "ID")
 
 
+# Organize hclust cuts and PCs into a df, and simplify platform information
 clus_df_hg <- data.frame(
   Avg_cut = cut_hg,
   ID = names(cut_hg)
@@ -125,7 +135,7 @@ clus_df_hg <- data.frame(
          Avg_cut = factor(Avg_cut, levels = unique(Avg_cut)))
 
 
-
+# Again for mouse
 clus_df_mm <- data.frame(
   Avg_cut = cut_mm,
   ID = names(cut_mm)
@@ -140,16 +150,41 @@ clus_df_mm <- data.frame(
 
 
 
-
-
-plot(hm_hg$tree_row)
-
-
-plot(hm_mm$tree_row)
+# Correlation between numeric metadata factors and PCs
+meta_cor_hg <- round(cor(select_if(clus_df_hg, is.numeric)), 4)
+meta_cor_mm <- round(cor(select_if(clus_df_mm, is.numeric)), 4)
 
 
 
-ggplot(clus_df_hg, aes(x = Avg_cut, y = log10(Median_UMI))) +
+# Plots
+# ------------------------------------------------------------------------------
+
+
+
+# Saving out human correlation heatmap
+png(height = 10, width = 12, units = "in", res = 300,
+    file = file.path(plot_dir, "mcg_data_cluster_mm.png"))
+heatmap_mm
+dev.off()
+
+# Saving out mouse correlation heatmap
+png(height = 10, width = 12, units = "in", res = 300,
+    file = file.path(plot_dir, "mcg_data_cluster_hg.png"))
+heatmap_hg
+dev.off()
+
+
+
+# Closer examination of dendogram 
+# plot(heatmap_hg$tree_row)
+# plot(heatmap_mm$tree_row)
+
+
+# The following was used to inspect potential technical factors driving 
+# clustering. Median UMI seemed to have the strongest association
+
+
+p1a <- ggplot(clus_df_hg, aes(x = Avg_cut, y = log10(Median_UMI))) +
   geom_boxplot(width = 0.2, outlier.shape = NA) +
   geom_jitter(shape = 21, colour = "slategrey", size = 3.4, width = 0.05) +
   xlab("Cluster") +
@@ -158,7 +193,7 @@ ggplot(clus_df_hg, aes(x = Avg_cut, y = log10(Median_UMI))) +
   theme(text = element_text(size = 20))
 
 
-ggplot(clus_df_mm, aes(x = Avg_cut, y = log10(Median_UMI))) +
+p1b <- ggplot(clus_df_mm, aes(x = Avg_cut, y = log10(Median_UMI))) +
   geom_boxplot(width = 0.2, outlier.shape = NA) +
   geom_jitter(shape = 21, colour = "slategrey", size = 3.4, width = 0.05) +
   xlab("Cluster") +
@@ -167,92 +202,26 @@ ggplot(clus_df_mm, aes(x = Avg_cut, y = log10(Median_UMI))) +
   theme(text = element_text(size = 20))
 
 
+# wilcox.test(clus_df_hg$Median_UMI+1 ~ clus_df_hg$Avg_cut)
+# wilcox.test(clus_df_mm$Median_UMI+1 ~ clus_df_mm$Avg_cut)
+
+
 # Count of cells by cluster
-boxplot(log10(clus_df_hg$N_cells+1) ~ clus_df_hg$Avg_cut)
-wilcox.test(clus_df_hg$N_cells ~ clus_df_hg$Avg_cut)
-# kruskal.test(clus_df_hg$N_cells ~ clus_df_hg$Avg_cut)
-
-boxplot(log10(clus_df_mm$N_cells+1) ~ clus_df_mm$Avg_cut)
-wilcox.test(clus_df_mm$N_cells ~ clus_df_mm$Avg_cut)
-# kruskal.test(clus_df_mm$N_cells ~ clus_df_mm$Avg_cut)
-
-
-# Median UMI by cluster
-boxplot(log10(clus_df_hg$Median_UMI+1) ~ clus_df_hg$Avg_cut)
-wilcox.test(clus_df_hg$Median_UMI+1 ~ clus_df_hg$Avg_cut)
-# kruskal.test(clus_df_hg$Median_UMI ~ clus_df_hg$Avg_cut)
-
-boxplot(log10(clus_df_mm$Median_UMI+1) ~ clus_df_mm$Avg_cut)
-wilcox.test(clus_df_mm$Median_UMI+1 ~ clus_df_mm$Avg_cut)
-# kruskal.test(clus_df_mm$Median_UMI ~ clus_df_mm$Avg_cut)
+# boxplot(log10(clus_df_hg$N_cells+1) ~ clus_df_hg$Avg_cut)
+# boxplot(log10(clus_df_mm$N_cells+1) ~ clus_df_mm$Avg_cut)
+# wilcox.test(clus_df_hg$N_cells ~ clus_df_hg$Avg_cut)
+# wilcox.test(clus_df_mm$N_cells ~ clus_df_mm$Avg_cut)
 
 
 # Gene msr by cluster
-boxplot(log10(clus_df_hg$N_msr_postfilt+1) ~ clus_df_hg$Avg_cut)
-wilcox.test(clus_df_hg$N_msr_postfilt+1 ~ clus_df_hg$Avg_cut)
-# kruskal.test(clus_df_hg$N_msr_postfilt ~ clus_df_hg$Avg_cut)
-
-boxplot(log10(clus_df_mm$N_msr_postfilt+1) ~ clus_df_mm$Avg_cut)
-wilcox.test(clus_df_mm$N_msr_postfilt+1 ~ clus_df_mm$Avg_cut)
-# kruskal.test(clus_df_mm$N_msr_postfilt ~ clus_df_mm$Avg_cut)
+# boxplot(log10(clus_df_hg$N_msr_postfilt+1) ~ clus_df_hg$Avg_cut)
+# boxplot(log10(clus_df_mm$N_msr_postfilt+1) ~ clus_df_mm$Avg_cut)
+# wilcox.test(clus_df_hg$N_msr_postfilt+1 ~ clus_df_hg$Avg_cut)
+# wilcox.test(clus_df_mm$N_msr_postfilt+1 ~ clus_df_mm$Avg_cut)
 
 
-fisher.test(table(clus_df_hg$Platform, clus_df_hg$Avg_cut))
-fisher.test(table(clus_df_mm$Platform, clus_df_mm$Avg_cut))
-
-fisher.test(table(clus_df_hg$Is_10X, clus_df_hg$Avg_cut))
-fisher.test(table(clus_df_mm$Is_10X, clus_df_mm$Avg_cut))
-
-
-round(cor(select_if(clus_df_hg, is.numeric)), 4)
-round(cor(select_if(clus_df_mm, is.numeric)), 4)
-
-
-boxplot(clus_df_hg$PC1 ~ clus_df_hg$Platform)
-boxplot(clus_df_hg$PC2 ~ clus_df_hg$Platform)
-kruskal.test(clus_df_hg$PC1 ~ clus_df_hg$Platform)
-kruskal.test(clus_df_hg$PC2 ~ clus_df_hg$Platform)
-
-boxplot(clus_df_mm$PC1 ~ clus_df_mm$Platform)
-boxplot(clus_df_mm$PC2 ~ clus_df_mm$Platform)
-kruskal.test(clus_df_mm$PC1 ~ clus_df_mm$Platform)
-kruskal.test(clus_df_mm$PC2 ~ clus_df_mm$Platform)
-
-
-boxplot(clus_df_hg$PC1 ~ clus_df_hg$Is_10X)
-boxplot(clus_df_hg$PC2 ~ clus_df_hg$Is_10X)
-wilcox.test(clus_df_hg$PC1 ~ clus_df_hg$Is_10X)
-wilcox.test(clus_df_hg$PC2 ~ clus_df_hg$Is_10X)
-
-boxplot(clus_df_mm$PC1 ~ clus_df_mm$Is_10X)
-boxplot(clus_df_mm$PC2 ~ clus_df_mm$Is_10X)
-kruskal.test(clus_df_mm$PC2 ~ clus_df_mm$Is_10X)
-kruskal.test(clus_df_mm$PC1 ~ clus_df_mm$Is_10X)
-
-
-
-ggplot(clus_df_hg, aes(x = PC1, y = PC2, fill = log10(N_cells))) +
-  geom_point(size = 4, shape = 21) +
-  scale_fill_gradient(low = "white", high = "firebrick") +
-  theme_classic()
-
-
-ggplot(clus_df_mm, aes(x = PC1, y = PC2, fill = log10(N_cells))) +
-  geom_point(size = 4, shape = 21) +
-  scale_fill_gradient(low = "white", high = "firebrick") +
-  theme_classic()
-
-
-
-ggplot(clus_df_hg, aes(x = PC1, y = PC2, fill = log10(Median_UMI))) +
-  geom_point(size = 4, shape = 21) +
-  scale_fill_gradient(low = "white", high = "firebrick") +
-  theme_classic()
-plot(clus_df_hg$PC1, log10(clus_df_hg$Median_UMI+1))
-
-ggplot(clus_df_mm, aes(x = PC1, y = PC2, fill = log10(Median_UMI))) +
-  geom_point(size = 4, shape = 21) +
-  scale_fill_gradient(low = "white", high = "firebrick") +
-  theme_classic()
-plot(clus_df_mm$PC1, log10(clus_df_mm$Median_UMI+1))
-
+# Platform
+# fisher.test(table(clus_df_hg$Platform, clus_df_hg$Avg_cut))
+# fisher.test(table(clus_df_mm$Platform, clus_df_mm$Avg_cut))
+# fisher.test(table(clus_df_hg$Is_10X, clus_df_hg$Avg_cut))
+# fisher.test(table(clus_df_mm$Is_10X, clus_df_mm$Avg_cut))
