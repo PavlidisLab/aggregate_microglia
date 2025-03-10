@@ -57,20 +57,6 @@ load_all_fz_mat <- function(paths, keep_genes, sub_genes) {
 
 
 
-
-# prepare_tf_mat <- function(mcg_l, macro_l, tf) {
-#   
-#   mcg_mat <- do.call(cbind, lapply(mcg_l, function(x) x[, tf, drop = FALSE]))
-#   macro_mat <- do.call(cbind, lapply(macro_l, function(x) x[, tf, drop = FALSE]))
-#   tf_mat <- cbind(mcg_mat, macro_mat)
-#   colnames(tf_mat) <- c(rep("Microglia", ncol(mcg_mat)), rep("Macrophage", ncol(macro_mat)))
-#   tf_mat <- tf_mat[, which(colSums(tf_mat) != 0)]
-#   
-#   return(tf_mat)
-# }
-
-
-
 prepare_tf_mat <- function(tf, mcg_l, macro_l) {
   
   mcg_mat <- do.call(cbind, lapply(mcg_l, function(x) x[, tf, drop = FALSE]))
@@ -115,6 +101,31 @@ fit_all_model <- function(mcg_l, macro_l, tfs, ncore = 1) {
   names(res_l) <- tfs
   return(res_l)
 }
+
+
+
+prepare_gene_df <- function(tf, gene, mcg_l, macro_l, expr_mat) {
+  
+  
+  fz <- prepare_tf_mat(tf, mcg_l, macro_l)[gene, ]
+  cts <- str_extract(names(fz), "Microglia|Macrophage")
+  ids <- names(fz)
+  
+  gene_df <- data.frame(
+    FZ = fz, 
+    CT = cts,
+    ID = ids,
+    Expr_TF = expr_mat[tf, ids],
+    Expr_gene = expr_mat[gene, ids],
+    Expr_diff = expr_mat[tf, ids] - expr_mat[gene, ids],
+    Expr_absdiff = abs(expr_mat[tf, ids] - expr_mat[gene, ids]),
+    Expr_sum = expr_mat[tf, ids] + expr_mat[gene, ids]
+  )
+  
+  return(gene_df)
+  
+}
+
 
 
 
@@ -191,7 +202,7 @@ macro_ix <- which(str_detect(colnames(tf_mat),  "Macrophage"))
 set.seed(15)
 
 
-null_diff <- mclapply(1:1000, function(x) {
+null_diffrank <- mclapply(1:1000, function(x) {
   
   sample_ix <-  sample(1:ncol(tf_mat), ncol(tf_mat), replace = FALSE)
   group1 <- sample_ix[1:length(mcg_ix)]
@@ -209,27 +220,15 @@ null_diff <- mclapply(1:1000, function(x) {
 }, mc.cores = ncore)
 
 
-null_diff <- do.call(cbind, null_diff)
-null_diff_scale <- apply(null_diff, 2, rescale_minMax)
+null_diffrank <- do.call(cbind, null_diffrank)
+# null_diff_scale <- apply(null_diff, 2, rescale_minMax)
 
 
 
-# hist(null_diff_scale["Csmd3", ], breaks = 1000, xlim = c(-1, 1))
-# abline(v = diffrank_df["Csmd3", "Scale_diff"], col = "red")
-# hist(null_diff["Csmd3", ], breaks = 1000, xlim = c(min(diffrank_df$Diff), max(diffrank_df$Diff)))
-# abline(v = diffrank_df["Csmd3", "Diff"], col = "red")
-# 
-# null_diff_mean <- rowMeans(null_diff)
-# null_diff_scale_mean <- rowMeans(null_diff_scale)
-# hist(null_diff_mean, breaks = 1000)
-# hist(null_diff_scale_mean, breaks = 1000)
-# plot(null_diff_mean, diffrank_df$Scale_diff)
-
-
-summ_null <- lapply(keep_genes, function(gene) {
+summ_null_diffrank <- lapply(keep_genes, function(gene) {
   
   obs <- diffrank_df[gene, "Diff"]
-  null <- null_diff[gene, ]
+  null <- null_diffrank[gene, ]
   null_mean <- mean(null)
   
   pval <- sum(abs(obs) <= abs(null)) / 1000
@@ -237,51 +236,20 @@ summ_null <- lapply(keep_genes, function(gene) {
   fc <- obs / null_mean
   
   data.frame(Symbol = gene, 
-             Obs_diff = obs,
+             Diff = obs,
              Mean_null_diff = null_mean,
-             Pval = pval, 
-             Z = z, 
-             FC = fc)
+             Pval_diff = pval, 
+             Z_diff = z, 
+             FC_diff = fc)
   
-})
-
-
-summ_null <- do.call(rbind, summ_null)
-
-
-
-summ_null_scale <- lapply(keep_genes, function(gene) {
-  
-  obs <- diffrank_df[gene, "Scale_diff"]
-  null <- null_diff_scale[gene, ]
-  null_mean <- mean(null)
-  
-  pval <- sum(abs(obs) <= abs(null)) / 1000
-  z <- (obs - null_mean) / sd(null)
-  fc <- obs / null_mean
-  
-  data.frame(Symbol = gene, 
-             Obs_diff = obs,
-             Mean_null_diff = null_mean,
-             Pval = pval, 
-             Z = z, 
-             FC = fc)
-  
-})
-
-summ_null_scale <- do.call(rbind, summ_null_scale)
+}) %>% 
+  do.call(rbind, .) %>% 
+  left_join(., diffrank_df, by = c("Symbol", "Diff"))
 
 
 
-# hist(summ_null$Pval, breaks = 1000)
-# hist(summ_null$Z, breaks = 1000)
-# hist(summ_null$FC, breaks = 1000)
-# plot(summ_null$Obs_diff, summ_null$Z)
-# 
-# hist(summ_null_scale$Pval, breaks = 1000)
-# hist(summ_null_scale$Z, breaks = 1000)
-# hist(summ_null_scale$FC, breaks = 1000)
-# plot(summ_null_scale$Obs_diff, summ_null_scale$Z)
+
+
 
 
 # TODO: figure out why this isn't identical
@@ -324,21 +292,19 @@ expr_mat <- cbind(mcg_summ$Mouse$QN_Avg[keep_genes, ],
                   macro_summ$Mouse$QN_Avg[keep_genes, ])
 
 
-colnames(expr_mat) <- c(rep("Microglia", ncol(mcg_summ$Mouse$QN_Avg[keep_genes, ])),
-                        rep("Macrophage", ncol(macro_summ$Mouse$QN_Avg[keep_genes, ])))
+expr_cts <- c(rep("Microglia", ncol(mcg_summ$Mouse$QN_Avg)),
+              rep("Macrophage", ncol(macro_summ$Mouse$QN_Avg)))
 
-cts <- factor(colnames(expr_mat))
 
-expr_design <- model.matrix(~ cts)
+colnames(expr_mat) <- paste0(expr_cts, "_", colnames(expr_mat))
 
-expr_v <- voom(expr_mat, expr_design)
+expr_cts <- factor(expr_cts)
+expr_design <- model.matrix(~ expr_cts)
 
 expr_fit <- eBayes(lmFit(expr_mat, expr_design))
-# expr_fit <- eBayes(lmFit(expr_v, expr_design))
-
 
 expr_res <- topTable(expr_fit,
-                     coef = "ctsMicroglia",
+                     coef = "expr_ctsMicroglia",
                      number = Inf,
                      adjust.method = "BH") %>% 
   rownames_to_column(var = "Symbol")
@@ -419,26 +385,19 @@ ggplot(res_l[[check_tf]], aes(x = logFC, y = -log10(adj.P.Val))) +
 check_gene <- "Dab2"
 
 
-check_fz <- prepare_tf_mat(mcg_l, macro_l, check_tf)[check_gene, ]
-check_fz <- data.frame(FZ = check_fz, CT = names(check_fz))
+check_df <- prepare_gene_df(check_tf, check_gene, mcg_l, macro_l, expr_mat)
 
-
-expr_df <- data.frame(
-  TF = expr_mat[check_tf, ],
-  Gene = expr_mat[check_gene, ],
-  CT = colnames(expr_mat)
-)
 
 
 tf_pval <- filter(expr_res, Symbol == check_tf)$adj.P.Val
-# suppressWarnings(wilcox.test(expr_df$TF ~ expr_df$CT))
+# suppressWarnings(wilcox.test(check_df$Expr_TF ~ check_df$CT))
 
 gene_pval <- filter(expr_res, Symbol == check_gene)$adj.P.Val
-# suppressWarnings(wilcox.test(expr_df$Gene ~ expr_df$CT))
+# suppressWarnings(wilcox.test(check_df$Expr_gene ~ check_df$CT))
 
 
 
-pxa <- ggplot(check_fz, aes(x = CT, y = FZ)) +
+pxa <- ggplot(check_df, aes(x = CT, y = FZ)) +
   geom_boxplot(width = 0.2, outlier.shape = NA) +
   geom_jitter(shape = 21, size = 1.8, alpha = 0.6, fill = "slategrey", width = 0.05) +
   ggtitle(paste0(check_tf, " - ", check_gene, " coexpr.")) +
@@ -448,7 +407,7 @@ pxa <- ggplot(check_fz, aes(x = CT, y = FZ)) +
 
 
 
-pxb <- ggplot(expr_df, aes(x = CT, y = TF)) +
+pxb <- ggplot(check_df, aes(x = CT, y = Expr_TF)) +
   geom_boxplot(width = 0.2, outlier.shape = NA) +
   geom_jitter(shape = 21, size = 1.8, alpha = 0.6, fill = "slategrey", width = 0.05) +
   labs(
@@ -461,7 +420,7 @@ pxb <- ggplot(expr_df, aes(x = CT, y = TF)) +
 
 
 
-pxc <- ggplot(expr_df, aes(x = CT, y = Gene)) +
+pxc <- ggplot(check_df, aes(x = CT, y = Expr_gene)) +
   geom_boxplot(width = 0.2, outlier.shape = NA) +
   geom_jitter(shape = 21, size = 1.8, alpha = 0.6, fill = "slategrey", width = 0.05) +
   labs(
@@ -493,133 +452,61 @@ res_df %>%
 
 
 # Checking adding difference in expression to diff coexpr model
+# TODO: can this work for limma?
 # -----------------------------------------------------------------------------
 
 
-names(mcg_l) <- str_extract(names(mcg_l), paste(mcg_meta$ID, collapse = "|"))
-names(macro_l) <- str_extract(names(macro_l), paste(macro_meta$ID, collapse = "|"))
+
+# filter(check_df, CT == "Microglia", ID == "Microglia_GSE102827")
+# mcg_summ$Mouse$QN_Avg[check_gene, "GSE102827"]
+# mcg_summ$Mouse$QN_Avg[check_tf, "GSE102827"]
+# mcg_summ$Mouse$QN_Avg[check_gene, "GSE102827"] + mcg_summ$Mouse$QN_Avg[check_tf, "GSE102827"]
+# mcg_summ$Mouse$QN_Avg[check_gene, "GSE102827"] - mcg_summ$Mouse$QN_Avg[check_tf, "GSE102827"]
 
 
 
-tf_mat <- prepare_tf_mat2(check_tf, mcg_l, macro_l)
-# tf_mat[1:5, 1:5]
+fit_expr_l <- mclapply(keep_genes, function(gene) {
 
+  if (gene == check_tf) return(NA)
 
-ids_mcg <- colnames(tf_mat) %>% 
-  str_extract(., "Microglia_.*") %>%
-  na.omit() %>% 
-  str_replace(., "^.*_", "")
+  gene_df <- prepare_gene_df(check_tf, gene, mcg_l, macro_l, expr_mat)
 
+  fit <- lm(FZ ~ CT + Expr_absdiff + Expr_sum, data = gene_df)
 
-ids_macro <- colnames(tf_mat) %>% 
-  str_extract(., "Macrophage_.*") %>%
-  na.omit() %>% 
-  str_replace(., "^.*_", "")
-
-
-
-expr_diff_mcg <- sweep(mcg_summ$Mouse$QN_Avg[keep_genes, ids_mcg], 2, 
-                       mcg_summ$Mouse$QN_Avg[check_tf, ids_mcg], "-")
-
-
-expr_diff_macro <- sweep(macro_summ$Mouse$QN_Avg[keep_genes, ids_macro], 2, 
-                         macro_summ$Mouse$QN_Avg[check_tf, ids_macro], "-")
-
-
-abs_expr_diff_mcg <- abs(expr_diff_mcg)
-abs_expr_diff_macro <- abs(expr_diff_macro)
-
-
-
-expr_add_mcg <- sweep(mcg_summ$Mouse$QN_Avg[keep_genes, ids_mcg], 2, 
-                       mcg_summ$Mouse$QN_Avg[check_tf, ids_mcg], "+")
-
-
-expr_add_macro <- sweep(macro_summ$Mouse$QN_Avg[keep_genes, ids_macro], 2, 
-                         macro_summ$Mouse$QN_Avg[check_tf, ids_macro], "+")
-
-
-
-stopifnot(identical(
-  expr_diff_mcg[, "GSE123335"],
-  mcg_summ$Mouse$QN_Avg[keep_genes, "GSE123335"] - mcg_summ$Mouse$QN_Avg[check_tf, "GSE123335"]
-))
-
-
-stopifnot(identical(
-  abs_expr_diff_macro[, "Kozareva2020"],
-  abs(macro_summ$Mouse$QN_Avg[keep_genes, "Kozareva2020"] - macro_summ$Mouse$QN_Avg[check_tf, "Kozareva2020"])
-))
-
-
-
-stopifnot(identical(
-  expr_add_mcg[, "GSE102827"],
-  mcg_summ$Mouse$QN_Avg[keep_genes, "GSE102827"] + mcg_summ$Mouse$QN_Avg[check_tf, "GSE102827"]
-))
-
-
-
-tf_df <- data.frame(
-  TF = rep(check_tf, nrow(tf_mat) * ncol(tf_mat)),
-  Gene = rep(rownames(tf_mat), each = ncol(tf_mat)),
-  Dataset = rep(colnames(tf_mat), by = ncol(tf_mat)),
-  FZ = as.numeric(t(tf_mat)),
-  Expr_diff = c(as.numeric(t(expr_diff_mcg)), as.numeric(t(expr_diff_macro))),
-  Expr_absdiff = c(as.numeric(t(abs_expr_diff_mcg)), as.numeric(t(abs_expr_diff_macro))),
-  Expr_add = c(as.numeric(t(expr_add_mcg)), as.numeric(t(expr_add_macro)))
-)
-
-tf_df$Cell_type <- str_replace(tf_df$Dataset, "_.*", "")
-
-
-
-# TODO: can this work for limma?
-# tf_mat_long <- matrix(tf_df$FZ, ncol = nrow(tf_df), nrow = 1)
-# colnames(tf_mat_long) <- tf_df$Gene
-# design <- model.matrix( ~ Cell_type + Abs_diff, data = tf_df)
-# fit <- eBayes(lmFit(tf_mat_long, design))
-# res <- topTable(fit, coef = "Cell_typeMicroglia", number = Inf)
-
-
-fit <- lm(FZ ~ Cell_type + Expr_absdiff + Expr_add, data = tf_df, subset = Gene == "Lgals3")
-summary(fit)
-
-
-
-fit_l <- mclapply(keep_genes, function(gene) {
-  
-  fit <- lm(FZ ~ Cell_type + Expr_absdiff + Expr_add, 
-            data = tf_df, subset = Gene == gene)
-  
   summ <- summary(fit)
-  
+
   data.frame(
     TF = check_tf,
     Gene = gene,
-    CT_est = summ$coefficients["Cell_typeMicroglia", "Estimate"],
-    CT_pval = summ$coefficients["Cell_typeMicroglia", "Pr(>|t|)"],
+    CT_est = summ$coefficients["CTMicroglia", "Estimate"],
+    CT_pval = summ$coefficients["CTMicroglia", "Pr(>|t|)"],
     Expr_absdiff_est = summ$coefficients["Expr_absdiff", "Estimate"],
     Expr_absdiff_pval = summ$coefficients["Expr_absdiff", "Pr(>|t|)"],
-    Expr_add_est = summ$coefficients["Expr_add", "Estimate"],
-    Expr_add_pval = summ$coefficients["Expr_add", "Pr(>|t|)"]
+    Expr_sum_est = summ$coefficients["Expr_sum", "Estimate"],
+    Expr_sum_pval = summ$coefficients["Expr_sum", "Pr(>|t|)"]
   )
-  
+
 }, mc.cores = ncore)
 
 
 
-fit_l2 <- mclapply(keep_genes, function(gene) {
+
+
+fit_noexpr_l <- mclapply(keep_genes, function(gene) {
   
-  fit <- lm(FZ ~ Cell_type, data = tf_df, subset = Gene == gene)
+  if (gene == check_tf) return(NA)
+  
+  gene_df <- prepare_gene_df(check_tf, gene, mcg_l, macro_l, expr_mat)
+  
+  fit <- lm(FZ ~ CT, data = gene_df)
+  
   summ <- summary(fit)
-  
   
   data.frame(
     TF = check_tf,
     Gene = gene,
-    CT_est = summ$coefficients["Cell_typeMicroglia", "Estimate"],
-    CT_pval = summ$coefficients["Cell_typeMicroglia", "Pr(>|t|)"]
+    CT_est = summ$coefficients["CTMicroglia", "Estimate"],
+    CT_pval = summ$coefficients["CTMicroglia", "Pr(>|t|)"]
   )
   
 }, mc.cores = ncore)
@@ -627,30 +514,37 @@ fit_l2 <- mclapply(keep_genes, function(gene) {
 
 
 
-fit_df <- do.call(rbind, fit_l) %>% 
+fit_expr_df <- do.call(rbind, fit_expr_l) %>%
    mutate(CT_adj_pval = p.adjust(CT_pval, method = "BH"),
-         Expr_absdiff_adj_pval = p.adjust(Expr_absdiff_pval, method = "BH"))
+          Expr_absdiff_adj_pval = p.adjust(Expr_absdiff_pval, method = "BH"),
+          Expr_sum_adj_pval = p.adjust(Expr_sum_pval, method = "BH"))
 
 
 
-fit_df2 <- do.call(rbind, fit_l2) %>% 
+fit_noexpr_df <- do.call(rbind, fit_noexpr_l) %>% 
   mutate(CT_adj_pval = p.adjust(CT_pval, method = "BH"))
 
 
 
+# Checking that limma -expr and lm -expr models are equivalent
+# check_noexpr <- left_join(fit_noexpr_df, res_l[[check_tf]], by = c("Gene" = "Symbol"))
+# plot(check_noexpr$CT_est, check_noexpr$logFC, xlab = "lm w/o expr", ylab = "limma w/o expr", cex.lab = 1.6)
+# plot(check_noexpr$CT_pval, check_noexpr$P.Value, xlab = "lm w/o expr", ylab = "limma w/o expr", cex.lab = 1.6)
+
+
+
 compare_df <- 
-  left_join(fit_df, fit_df2, by = "Gene", suffix = c("_w_expr", "_wo_expr")) %>% 
-  left_join(res_l[[check_tf]], by = c("Gene" = "Symbol")) %>% 
-  left_join(diffrank_df, by = c("Gene" = "Symbol")) %>% 
-  left_join(summ_null, by = c("Gene" = "Symbol"))
+  left_join(fit_expr_df, fit_noexpr_df, by = "Gene", suffix = c("_w_expr", "_wo_expr")) %>% 
+  left_join(expr_res, by = c("Gene" = "Symbol")) %>% 
+  left_join(summ_null_diffrank, by = c("Gene" = "Symbol")) %>% 
+  dplyr::select(-c(TF_w_expr, TF_wo_expr))
+
 
 
 cor(select_if(compare_df, is.numeric), use = "pairwise.complete.obs")
 
 
-plot(compare_df$CT_est_wo_expr, compare_df$logFC, xlab = "lm w/o expr", ylab = "limma w/o expr", cex.lab = 1.6)
 plot(compare_df$CT_est_w_expr, compare_df$CT_est_wo_expr, xlab = "lm w/ expr", ylab = "lm w/o expr", cex.lab = 1.6)
-plot(-log10(compare_df$CT_adj_pval_w_expr), -log10(compare_df$adj.P.Val), xlab = "lm w/o expr", ylab = "limma w/o expr", cex.lab = 1.6)
 
 
 ggplot(compare_df, aes(x = -log10(CT_adj_pval_w_expr), y = -log10(CT_adj_pval_wo_expr))) +
@@ -659,38 +553,12 @@ ggplot(compare_df, aes(x = -log10(CT_adj_pval_w_expr), y = -log10(CT_adj_pval_wo
   geom_vline(xintercept = -log10(0.05), linetype = "dashed", colour = "firebrick") +
   ylab("-log10 adj. pval for lm (-expr)") +
   xlab("-log10 adj. pval for lm (+expr)") +
+  ggtitle(check_tf) +
   theme_classic() +
   theme(text = element_text(size = 20))
 
 
-
-# compare_df %>% 
-#   mutate(
-#     Score_w_expr = -log10(CT_adj_pval_w_expr),
-#     Score_wo_expr = -log10(CT_adj_pval_wo_expr),
-#     Diff = Score_w_expr - Score_wo_expr) %>% 
-#   dplyr::select(Gene, Score_w_expr, Score_wo_expr, Diff) %>% 
-#   view()
-
-
-
-compare_df %>% 
-  slice_max(abs(Diff), n = 30) %>% 
-  arrange(CT_adj_pval_w_expr)
-
-
-
-tt1 <- fit_df %>% 
-  left_join(diffrank_df, by = c("Gene" = "Symbol")) %>% 
-  left_join(summ_null, by = c("Gene" = "Symbol")) %>% 
-  left_join(expr_res, by = c("Gene" = "Symbol"))
-
-
-plot(tt1$CT_est, tt1$logFC)
-plot(tt1$Z, tt1$logFC)
-
-
-ggplot(tt1, aes(x = logFC, y = Z)) +
+ggplot(compare_df, aes(x = logFC, y = Z_diff)) +
   geom_point(shape = 21, size = 2.4, fill = "slategrey", colour = "slategrey", alpha = 0.8) +
   geom_hline(yintercept = -2, linetype = "dashed", colour = "firebrick") +
   geom_hline(yintercept = 2, linetype = "dashed", colour = "firebrick") +
@@ -704,97 +572,45 @@ ggplot(tt1, aes(x = logFC, y = Z)) +
 
 
 
+plot(compare_df$Expr_absdiff_est, compare_df$logFC)
+plot(compare_df$Expr_sum_est, compare_df$logFC)
+
+
 
 # Model over all TFs
 
 
-
-ready_tf_df <- function(tf, keep_genes, tf_mat, mcg_summ, macro_summ) {
-  
-  
-  ids_mcg <- colnames(tf_mat) %>% 
-    str_extract(., "Microglia_.*") %>%
-    na.omit() %>% 
-    str_replace(., "^.*_", "")
-  
-  
-  ids_macro <- colnames(tf_mat) %>% 
-    str_extract(., "Macrophage_.*") %>%
-    na.omit() %>% 
-    str_replace(., "^.*_", "")
-  
-  
-  
-  expr_diff_mcg <- sweep(mcg_summ$Mouse$QN_Avg[keep_genes, ids_mcg], 2, 
-                         mcg_summ$Mouse$QN_Avg[tf, ids_mcg], "-")
-  
-  
-  expr_diff_macro <- sweep(macro_summ$Mouse$QN_Avg[keep_genes, ids_macro], 2, 
-                           macro_summ$Mouse$QN_Avg[tf, ids_macro], "-")
-  
-  
-  abs_expr_diff_mcg <- abs(expr_diff_mcg)
-  abs_expr_diff_macro <- abs(expr_diff_macro)
-  
-  
-  
-  expr_add_mcg <- sweep(mcg_summ$Mouse$QN_Avg[keep_genes, ids_mcg], 2, 
-                        mcg_summ$Mouse$QN_Avg[tf, ids_mcg], "+")
-  
-  
-  expr_add_macro <- sweep(macro_summ$Mouse$QN_Avg[keep_genes, ids_macro], 2, 
-                          macro_summ$Mouse$QN_Avg[tf, ids_macro], "+")
-  
-  
-  tf_df <- data.frame(
-    TF = rep(tf, nrow(tf_mat) * ncol(tf_mat)),
-    Gene = rep(rownames(tf_mat), each = ncol(tf_mat)),
-    Dataset = rep(colnames(tf_mat), by = ncol(tf_mat)),
-    FZ = as.numeric(t(tf_mat)),
-    Expr_diff = c(as.numeric(t(expr_diff_mcg)), as.numeric(t(expr_diff_macro))),
-    Expr_absdiff = c(as.numeric(t(abs_expr_diff_mcg)), as.numeric(t(abs_expr_diff_macro))),
-    Expr_add = c(as.numeric(t(expr_add_mcg)), as.numeric(t(expr_add_macro)))
-  )
-  
-  tf_df$Cell_type <- str_replace(tf_df$Dataset, "_.*", "")
-  
-  return(tf_df)
-}
-
-
-
-
-
-fit_diffcoexpr_all_tfs <- function(genes, tfs, mcg_l, macro_l, mcg_summ, macro_summ) {
+fit_diffcoexpr_all_tfs <- function(genes, tfs, mcg_l, macro_l, expr_mat, ncore) {
   
   tf_l <- mclapply(tfs, function(tf) {
     
-    message(paste(tf, Sys.time()))
-    tf_mat <- prepare_tf_mat2(tf, mcg_l, macro_l)
-    tf_df <- ready_tf_df(tf, genes, tf_mat, mcg_summ, macro_summ)
-    
     fit_l <- lapply(keep_genes, function(gene) {
       
-      fit <- lm(FZ ~ Cell_type + Expr_absdiff + Expr_add, 
-                data = tf_df, subset = Gene == gene)
+      if (gene == tf) return(NA)
+      
+      gene_df <- prepare_gene_df(tf, gene, mcg_l, macro_l, expr_mat)
+      
+      fit <- lm(FZ ~ CT + Expr_absdiff + Expr_sum, data = gene_df)
       
       summ <- summary(fit)
       
       data.frame(
         TF = tf,
         Gene = gene,
-        CT_est = summ$coefficients["Cell_typeMicroglia", "Estimate"],
-        CT_pval = summ$coefficients["Cell_typeMicroglia", "Pr(>|t|)"],
+        CT_est = summ$coefficients["CTMicroglia", "Estimate"],
+        CT_pval = summ$coefficients["CTMicroglia", "Pr(>|t|)"],
         Expr_absdiff_est = summ$coefficients["Expr_absdiff", "Estimate"],
         Expr_absdiff_pval = summ$coefficients["Expr_absdiff", "Pr(>|t|)"],
-        Expr_add_est = summ$coefficients["Expr_add", "Estimate"],
-        Expr_add_pval = summ$coefficients["Expr_add", "Pr(>|t|)"]
+        Expr_sum_est = summ$coefficients["Expr_sum", "Estimate"],
+        Expr_sum_pval = summ$coefficients["Expr_sum", "Pr(>|t|)"]
       )
       
     })
     
     fit_df <- do.call(rbind, fit_l) %>% 
-      mutate(CT_adj_pval = p.adjust(CT_pval, method = "BH"))
+      mutate(CT_adj_pval = p.adjust(CT_pval, method = "BH"),
+             Expr_absdiff_adj_pval = p.adjust(Expr_absdiff_pval, method = "BH"),
+             Expr_sum_adj_pval = p.adjust(Expr_sum_pval, method = "BH"))
     
   }, mc.cores = ncore)
   
@@ -808,13 +624,13 @@ tf_fit_l <- fit_diffcoexpr_all_tfs(genes = keep_genes,
                                    tfs = keep_tfs, 
                                    mcg_l = mcg_l,
                                    macro_l = macro_l, 
-                                   mcg_summ = mcg_summ,
-                                   macro_summ = macro_summ)
+                                   expr_mat = expr_mat,
+                                   ncore = 20)
 
 
 
 saveRDS(tf_fit_l, "/space/scratch/amorin/aggregate_microglia/mcg_macro_diffcoexpr_tf_lmfit.RDS")
-
+stop()
 
 
 n_sig2 <- sapply(tf_fit_l, function(x) sum(x$CT_adj_pval < 0.05, na.rm = TRUE))
@@ -866,13 +682,13 @@ boxplot(tf_df$Expr_add ~ tf_df$Cell_type)
 boxplot(tf_df$FZ ~ tf_df$Cell_type)
 
 
-expr_df$Diff <- expr_df$TF - expr_df$Gene
-expr_df$Abs_diff <- abs(expr_df$Diff)
-expr_df$Add <- expr_df$TF + expr_df$Gene
+check_expr$Diff <- check_expr$TF - check_expr$Gene
+check_expr$Abs_diff <- abs(check_expr$Diff)
+check_expr$Add <- check_expr$TF + check_expr$Gene
 
-boxplot(expr_df$Diff ~ expr_df$CT)
-boxplot(expr_df$Abs_diff ~ expr_df$CT)
-boxplot(expr_df$Add ~ expr_df$CT)
+boxplot(check_expr$Diff ~ check_expr$CT)
+boxplot(check_expr$Abs_diff ~ check_expr$CT)
+boxplot(check_expr$Add ~ check_expr$CT)
 
 
 
