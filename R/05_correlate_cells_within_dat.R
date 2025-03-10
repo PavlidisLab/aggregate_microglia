@@ -1,106 +1,84 @@
-## TODO
+## Calculate the cell to cell correlation within each microglia dataset, to 
+## compare how "consistent" the microglial cells are across data
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
 library(aggtools)
 library(egg)
+library(parallel)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
+set.seed(5)
+
+# Dataset meta
 mcg_meta <- read.delim(mcg_meta_dedup_path)
-dat_l <- readRDS(mcg_dat_path)
 
 
-# Note that I inspected taking cor after filtering away 0 genes, but saw
-# trivial change to summary stats
+# Note: I inspected taking cor after filtering away 0 genes, but saw trivial 
+# change to summary stats so I'm using the full set of genes
 
-# TODO: check cell count and subsample at threshold
+# Note: I was getting errors with some of the larger datasets, so I sample
+# 1000 cells X10 and summarize this info for datasets with >= 10,000 cells
 
-calc_cell_cor <- function(dat_l) {
+summarize_cell_cor <- function(dat_l, 
+                               n_cell_threshold = 10e3, 
+                               n_sample_cells = 1e3,
+                               n_samples = 10,
+                               verbose = TRUE,
+                               ncores = 1) {
   
-  cor_l <- lapply(names(dat_l), function(x) {
-    
-    message(paste(x, Sys.time()))
-    
-    result <- tryCatch({
-      cell_cor <- aggtools::sparse_pcor(dat_l[[x]]$Mat)
-      cell_cor <- mat_to_df(cell_cor, value_name = "Cor")
-      summary(cell_cor$Cor)
-    }, 
-    error = function(e) NULL)
-    
-    return(result)
-    
-  })
-  names(cor_l) <- names(dat_l)
+  ids <- names(dat_l)
   
-  return(cor_l)
-}
-
-
-
-calc_sample_cell_cor <- function(dat_l, 
-                                 # mcg_meta, 
-                                 n_cell_threshold = 10e3, 
-                                 n_sample_cells = 1e3,
-                                 n_samples = 10) {
-  
-  cor_l <- lapply(names(dat_l), function(x) {
+  summ_cor_l <- mclapply(ids, function(x) {
+    
+    if (verbose) message(paste(x, Sys.time()))
     
     mat <- dat_l[[x]]$Mat
+    ncells <- ncol(mat)
     
-    sample_l <- lapply(1:n_samples, function(i) {
-      sample_cells <-  sample(colnames(mat), n_sample_cells, replace = FALSE)
-      submat <- mat[, sample_cells]
-      cell_cor <- aggtools::sparse_pcor(submat)
-      cell_cor <- mat_to_df(cell_cor, value_name = "Cor")[["Cor"]]
-    })
+    if (ncells < n_cell_threshold) {
+      
+      cell_cor <- aggtools::sparse_pcor(dat_l[[x]]$Mat)
+      cor_df <- mat_to_df(cell_cor, value_name = "Cor")
+      
+    } else {
+      
+      sample_l <- lapply(1:n_samples, function(i) {
+        sample_cells <-  sample(colnames(mat), n_sample_cells, replace = FALSE)
+        submat <- mat[, sample_cells]
+        cell_cor <- aggtools::sparse_pcor(submat)
+        mat_to_df(cell_cor, value_name = "Cor")
+      })
+      
+      cor_df <- dplyr::bind_rows(sample_l)
+      
+    }
     
-    summary(unlist(sample_l))
-
-  })
+    summary(cor_df$Cor)
+    
+  }, mc.cores = ncores)
+  names(summ_cor_l) <- ids
   
-  names(cor_l) <- names(dat_l)
-  return(cor_l)
+  return(summ_cor_l)
 }
 
 
 
-
-
+# Run/save/load
 if (!file.exists(cell_cor_path)) {
-  cor_l <- calc_cell_cor(dat_l)
+  dat_l <- readRDS(mcg_dat_path) # List of count matrices and their metadata
+  cor_l <- summarize_cell_cor(dat_l, ncores = ncore)
   saveRDS(cor_l, cell_cor_path)
 } else {
   cor_l <- readRDS(cell_cor_path)
 }
 
 
-stop()
-
-
-# TODO: some elements failed in lapply call, but can be regen isolated...
-# figure out how to do one pass
-
-null_cor <- mcg_meta %>% 
-  filter(ID %in% names(which(sapply(cor_l, function(x) is.null(x))))) %>% 
-  arrange(N_cells)
-
-
-rerun_cor_ids <- filter(null_cor, N_cells < 10e3) %>% pull(ID) %>% unique()
-sample_cor_ids <- setdiff(null_cor$ID, rerun_cor_ids)
-
-
-rerun_cor <- calc_cell_cor(dat_l[rerun_cor_ids])
-sample_cor <- calc_sample_cell_cor(dat_l[sample_cor_ids])
-
-
-input_l <- c(cor_l[!sapply(cor_l, is.null)], rerun_cor, sample_cor)
-
 
 # Setting up summary df for plotting
 
-plot_df <- do.call(rbind, input_l) %>% 
+plot_df <- do.call(rbind, cor_l) %>% 
   as.data.frame() %>% 
   rownames_to_column(var = "ID") %>% 
   left_join(., mcg_meta, by = "ID") %>% 
@@ -111,17 +89,8 @@ plot_df <- do.call(rbind, input_l) %>%
          Platform = ifelse(sapply(str_split(Platform, ","), length) != 1, "Mixed", Platform))
 
 
-
-
-# cor.test(plot_df$Median, plot_df$N_cells, method = "spearman")
-# cor.test(plot_df$Median, plot_df$Median_UMI, method = "spearman")
-# table(plot_df$Platform)
-
-
-
 # Spread of intracellular correlations per dataset, colouring text by species
 
-# TODO: This throws a warning, need to figure out native support
 species_col <- ifelse(plot_df$Species == "Human", "royalblue", "goldenrod")
 
 p1 <- 
