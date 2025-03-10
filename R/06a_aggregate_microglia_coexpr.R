@@ -17,25 +17,18 @@ meta <- read.delim(mcg_meta_path)
 meta_hg <- filter(meta, Species == "Human")
 meta_mm <- filter(meta, Species == "Mouse")
 
-# Paths for the lists of aggregate coexpression and NA tracking matrices
-mcg_fz_hg_path <- file.path(cmat_dir_hg, "aggregate_cormat_FZ_hg.RDS")
-mcg_allrank_hg_path <- file.path(cmat_dir_hg, "aggregate_cormat_allrank_hg.RDS")
-mcg_colrank_hg_path <- file.path(cmat_dir_hg, "aggregate_cormat_colrank_hg.RDS")
-
-mcg_fz_mm_path <- file.path(cmat_dir_mm, "aggregate_cormat_FZ_mm.RDS")
-mcg_allrank_mm_path <- file.path(cmat_dir_mm, "aggregate_cormat_allrank_mm.RDS")
-mcg_colrank_mm_path <- file.path(cmat_dir_mm, "aggregate_cormat_colrank_mm.RDS")
 
 
 # Generate and save
 # ------------------------------------------------------------------------------
 
 
+# Human FZ
 save_function_results(
-  path = fz_path,
+  path = mcg_fz_hg_path,
   fun = aggr_coexpr_multi_dataset,
   args = list(
-    input_df = meta,
+    input_df = meta_hg,
     pc_df = pc_hg,
     cor_method = "pearson",
     agg_method = "FZ"
@@ -43,12 +36,12 @@ save_function_results(
 )
 
 
-
+# Human allrank
 save_function_results(
-  path = allrank_path,
+  path = mcg_allrank_hg_path,
   fun = aggr_coexpr_multi_dataset,
   args = list(
-    input_df = meta,
+    input_df = meta_hg,
     pc_df = pc_hg,
     cor_method = "pearson",
     agg_method = "allrank"
@@ -56,13 +49,53 @@ save_function_results(
 )
 
 
-
+# Human colrank
 save_function_results(
-  path = colrank_path,
+  path = mcg_colrank_hg_path,
   fun = aggr_coexpr_multi_dataset,
   args = list(
-    input_df = meta,
+    input_df = meta_hg,
     pc_df = pc_hg,
+    cor_method = "pearson",
+    agg_method = "colrank"
+  )
+)
+
+
+
+# Mouse FZ
+save_function_results(
+  path = mcg_fz_mm_path,
+  fun = aggr_coexpr_multi_dataset,
+  args = list(
+    input_df = meta_mm,
+    pc_df = pc_mm,
+    cor_method = "pearson",
+    agg_method = "FZ"
+  )
+)
+
+
+# Mouse allrank
+save_function_results(
+  path = mcg_allrank_mm_path,
+  fun = aggr_coexpr_multi_dataset,
+  args = list(
+    input_df = meta_mm,
+    pc_df = pc_mm,
+    cor_method = "pearson",
+    agg_method = "allrank"
+  )
+)
+
+
+# Mouse colrank
+save_function_results(
+  path = mcg_colrank_mm_path,
+  fun = aggr_coexpr_multi_dataset,
+  args = list(
+    input_df = meta_mm,
+    pc_df = pc_mm,
     cor_method = "pearson",
     agg_method = "colrank"
   )
