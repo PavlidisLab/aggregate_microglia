@@ -48,6 +48,7 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
-# Scratch/test
+# Scratch/test/misc
 python/scratch/
 R/misc/
+python/__pycache__/
