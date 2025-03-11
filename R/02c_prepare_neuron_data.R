@@ -1,4 +1,4 @@
-## TODO
+## Isolating (coarse-level) neuron cell types
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)

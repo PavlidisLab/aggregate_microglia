@@ -1,4 +1,4 @@
-## TODO
+## Isolating astrocyte cell types
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
