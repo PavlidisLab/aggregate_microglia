@@ -1,3 +1,8 @@
+## This script is essentially a copy of aggtools, save that it allows for
+## calculation of Spearman's correlation. This requires (and thus relaxes checks)
+## dense matrices.
+
+
 #' Rank the columns of a matrix such that rank=1 is the highest positive value
 #'
 #' @param mat A numeric matrix
