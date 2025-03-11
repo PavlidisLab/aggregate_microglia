@@ -48,4 +48,6 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
+# Scratch/test
 python/scratch/
+R/misc/
