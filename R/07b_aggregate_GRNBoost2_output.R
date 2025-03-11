@@ -1,11 +1,11 @@
-## GRNBoost2 was ran 100 times on each microglia dataset. For each dataset ID,
-## load each iterations and average into one matrix. Then, generate one global
-## matrix that averages all dataset matrices.
+## GRNBoost2 was ran 100 times on each microglia dataset. For each dataset, load
+## all iterations and average into one matrix. Looked at two aggregations from 
+## here: averaging across all of these summary matrices, or using allrank.
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
 library(parallel)
-source("/home/amorin/Projects/aggtools/R/aggregate_functions.R") # TODO: replace
+library(aggtools)
 source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/grnboost2_utils.R")
@@ -13,11 +13,6 @@ source("R/utils/grnboost2_utils.R")
 # Directory of GRNBoost2 output
 grn_dir <- file.path(data_out_dir, "GRNBoost2")
 
-# Output paths
-grn_avg_hg_path <- file.path(data_out_dir, "GRNBoost2_average_mat_hg.RDS")
-grn_avg_mm_path <- file.path(data_out_dir, "GRNBoost2_average_mat_mm.RDS")
-grn_allrank_hg_path <- file.path(data_out_dir, "GRNBoost2_allrank_mat_hg.RDS")
-grn_allrank_mm_path <- file.path(data_out_dir, "GRNBoost2_allrank_mat_mm.RDS")
 
 # Microglia datasets
 mcg_meta <- read.delim(mcg_meta_dedup_path)
@@ -27,24 +22,18 @@ ids_hg <- filter(mcg_meta, Species == "Human")$ID
 # List of measurement info to keep filtered genes
 count_summ <- readRDS(mcg_count_summ_list_path)
 
-# Load genes/TFs
+# Load genes/TF tables
 pc_hg <- read.delim(ref_hg_path)
 pc_mm <- read.delim(ref_mm_path)
 tfs_hg <- read.delim(tfs_hg_path)
 tfs_mm <- read.delim(tfs_mm_path)
 
 
-# Min genes to keep
-keep_hg <- count_summ$Human$Summ_df %>% 
-  filter(N_msr >= floor(max(N_msr) * 1/3)) %>%
-  select(Symbol)
-
-keep_mm <- count_summ$Mouse$Summ_df %>% 
-  filter(N_msr >= floor(max(N_msr) * 1/3)) %>%
-  select(Symbol)
-
-keep_tfs_hg <- intersect(tfs_hg$Symbol, keep_hg$Symbol)
-keep_tfs_mm <- intersect(tfs_mm$Symbol, keep_mm$Symbol)
+# Genes to keep after filtering
+keep_hg <- count_summ$Human$Filter_genes
+keep_mm <- count_summ$Mouse$Filter_genes 
+keep_tfs_hg <- intersect(tfs_hg$Symbol, keep_hg)
+keep_tfs_mm <- intersect(tfs_mm$Symbol, keep_mm)
 
 
 
