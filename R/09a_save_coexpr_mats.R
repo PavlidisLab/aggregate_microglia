@@ -1,24 +1,31 @@
+## To perform differential coexpression, need to have the individual coexpr
+## mats. This performs the same filtering as the aggregation workflow, but 
+## saves the coexpr matrices for microglia and macrophages instead of aggregating.
+## -----------------------------------------------------------------------------
+
 library(tidyverse)
 library(data.table)
 library(aggtools)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
-# Gene table
-pc_df_hg <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
-pc_df_mm <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
+# Gene tables
+pc_hg <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
+pc_mm <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
 
-
-
-
-
-# Microglia meta with file paths
+# Meta with file paths
 mcg_meta <- read.delim(mcg_meta_dedup_path)
-meta_hg <- filter(mcg_meta, Species == "Human")
-meta_mm <- filter(mcg_meta, Species == "Mouse")
+mcg_meta_hg <- filter(mcg_meta, Species == "Human")
+mcg_meta_mm <- filter(mcg_meta, Species == "Mouse")
+
+macro_meta <- read.delim(macro_meta_dedup_path)
+macro_meta_hg <- filter(macro_meta, Species == "Human")
+macro_meta_mm <- filter(macro_meta, Species == "Mouse")
 
 
-##
+# Iterate through each dataset in the input/meta df, loading the count matrix,
+# performing coexpression, and saving out the result
+# ------------------------------------------------------------------------------
 
 save_coexpr_multi_dataset <- function(input_df,
                                       pc_df,
@@ -79,24 +86,45 @@ save_coexpr_multi_dataset <- function(input_df,
 }
 
 
-##
 
 
 
+# Run/save
+# ------------------------------------------------------------------------------
 
 
+# Microglia human
 save_coexpr_multi_dataset(
-  input_df = meta_hg,
-  pc_df = pc_df_hg,
+  input_df = mcg_meta_hg,
+  pc_df = pc_hg,
   cor_method = "pearson",
   out_dir = cmat_dir_hg
 )
 
 
+# Microglia mouse
 save_coexpr_multi_dataset(
-  input_df = meta_mm,
-  pc_df = pc_df_mm,
+  input_df = mcg_meta_mm,
+  pc_df = pc_mm,
   cor_method = "pearson",
   out_dir = cmat_dir_mm
 )
 
+
+
+# Macrophage human
+save_coexpr_multi_dataset(
+  input_df = macro_meta_hg,
+  pc_df = pc_hg,
+  cor_method = "pearson",
+  out_dir = "/space/scratch/amorin/aggregate_microglia/Cormats/Macrophage_hg"
+)
+
+
+# Macrophage mouse
+save_coexpr_multi_dataset(
+  input_df = macro_meta_mm,
+  pc_df = pc_mm,
+  cor_method = "pearson",
+  out_dir = "/space/scratch/amorin/aggregate_microglia/Cormats/Macrophage_mm"
+)

@@ -1,4 +1,4 @@
-## TODO
+## This script performs a saturation analysis
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -18,12 +18,11 @@ set.seed(5)
 
 # Dataset meta and data IDs
 mcg_meta <- read.delim(mcg_meta_dedup_path)
-ids_hg <- unique(filter(mcg_meta, Species == "Human")$ID)
 ids_mm <- unique(filter(mcg_meta, Species == "Mouse")$ID)
 
 # Relevant gene tables
 pc_mm <- read.delim(ref_mm_path)
-tfs_mm <- read.delim("/home/amorin/Data/Metadata/AnimalTFDB_mouse_V4.tsv")
+tfs_mm <- read.delim(tfs_mm_path)
 
 # The final aggregate/global profile used for comparison
 agg_mm <- readRDS("/space/scratch/amorin/aggregate_microglia/Cormats/Mm_pcor/aggregate_cormat_FZ_mm.RDS")
@@ -36,8 +35,8 @@ cmat_dir_mm <- "/space/scratch/amorin/aggregate_microglia/Cormats/Mm_pcor/"
 pattern <- "_cormat.tsv"
 
 # Output paths
-ind_topk_path <- file.path(data_out_dir, "microglia_individual_dataset_topk_mm.RDS")
-saturation_path <- file.path(data_out_dir, "microglia_coexpr_saturation_mm.RDS")
+ind_topk_mm_path <- file.path(data_out_dir, "microglia_individual_dataset_topk_mm.RDS")
+saturation_mm_path <- file.path(data_out_dir, "microglia_coexpr_saturation_mm.RDS")
 
 
 # Functions
@@ -50,11 +49,11 @@ saturation_path <- file.path(data_out_dir, "microglia_coexpr_saturation_mm.RDS")
 # Pattern: "_NA_mat.tsv" for NA counts
 
 load_mat_to_list  <- function(ids,
-                               dir,
-                               pattern,  
-                               genes,
-                               sub_genes = NULL,
-                               verbose = TRUE) {
+                              dir,
+                              pattern,  
+                              genes,
+                              sub_genes = NULL,
+                              verbose = TRUE) {
   
   mat_l <- lapply(ids, function(id) {
     if (verbose) message(paste(id, Sys.time()))
@@ -102,7 +101,7 @@ load_or_generate_agg <- function(path,
 
 ready_cmat <- function(cmat, keep_genes, keep_tfs) {
   
-  cmat <- cmat[keep_mm, keep_tfs_mm]
+  cmat <- cmat[keep_genes, keep_tfs]
   cmat[is.na(cmat)] <- 0
   cmat[cmat > 1] <- 1
   cmat[cmat < -1] <- -1
@@ -173,7 +172,7 @@ na_mat_l <- lapply(cmat_l, function(x) {
 
 
 
-if (!file.exists(ind_topk_path)) {
+if (!file.exists(ind_topk_mm_path)) {
   
   # TopK overlap of each individual dataset with the global
   ind_topk_l <- lapply(cmat_l, function(mat) {
@@ -185,12 +184,9 @@ if (!file.exists(ind_topk_path)) {
   
   ind_topk_mat <- do.call(cbind, ind_topk_l)
   
-  saveRDS(ind_topk_mat, ind_topk_path)
+  saveRDS(ind_topk_mat, ind_topk_mm_path)
   
 }
-
-
-
 
 
 
@@ -199,33 +195,6 @@ if (!file.exists(ind_topk_path)) {
 # TODO: function
 
 steps <- 2:(length(ids_mm) - 1)
-
-
-
-
-# Using all matrices all at once. A gene may not be measured in a sample.
-
-# step_l <- mclapply(steps, function(step) {
-# 
-#   message(paste("Step ==", step, Sys.time()))
-#   
-#   iter_l <- lapply(1:n_iter, function(iter) {
-#     
-#     sample_ids <- sample(ids_mm, size = step, replace = FALSE)
-#     msr_mat <- count_msr(na_mat_l[sample_ids])  # count of msr'd among samples
-#     avg_sample <- Reduce("+", cmat_l[sample_ids]) / msr_mat
-#     avg_sample[is.na(avg_sample)] <- 0  # 0/0 -> NA, convert back to 0s
-#     pair_colwise_topk(mat1 = avg_sample, mat2 = agg_mat_mm, k = k, ncores = 1)
-# 
-#   })
-#   
-#   iter_mat <- do.call(rbind, iter_l)
-#   iter_summ <- colwise_summary(iter_mat)
-# 
-#   return(iter_summ)
-#   
-# }, mc.cores = ncore)
-
 
 
 
@@ -266,14 +235,14 @@ step_l <- mclapply(keep_tfs_mm, function(tf) {
 names(step_l) <- keep_tfs_mm
 
 
-saveRDS(step_l, saturation_path)
+saveRDS(step_l, saturation_mm_path)
 
 
 
 
 
-ind_topk_mat <- readRDS(ind_topk_path)
-step_l <- readRDS(saturation_path)
+ind_topk_mat <- readRDS(ind_topk_mm_path)
+step_l <- readRDS(saturation_mm_path)
 
 
 
@@ -385,30 +354,6 @@ rec_df <- do.call(rbind, rec_df) %>%
 
 
 
-# rec_df <- lapply(keep_tfs_mm, function(gene) {
-#   
-#   n_msr <- filter(msr_mm, Symbol == gene)$N_msr
-#   
-#   min_step <- bind_rows(lapply(step_l, function(x) x[gene, ])) %>% 
-#     mutate(N_step = steps) %>%
-#     filter(N_step <= n_msr) %>%   # TODO consider best way to handle med msr'd genes
-#     filter(Mean >= (k * 0.8)) %>% 
-#     slice_min(N_step, n = 1) %>%
-#     pull(N_step)
-#   
-#   if (length(min_step) == 0) min_step <- 0
-#   
-#   data.frame(Symbol = gene, 
-#              Min_n = min_step, 
-#              Min_prop = min_step / n_msr)
-#   
-# })
-# 
-# 
-# rec_df <- do.call(rbind, rec_df)
-
-
-
 hist(rec_df$Min_prop, breaks = 100)
 hist(rec_df$Min_n, breaks = 100)
 plot(rec_df$Min_prop, rec_df$QN_avg)
@@ -499,33 +444,6 @@ plot_topk_steps <- function(gene, step_l, k) {
 }
 
 
-
-
-# plot_topk_steps <- function(gene, step_l, k) {
-#   
-#   # Isolating steps as well as minimum steps to achieve recovery from summary df
-#   plot_df <- bind_rows(lapply(step_l, function(x) x[gene, ])) %>% 
-#     mutate(N_step = steps)
-#   
-#   min_step <- plot_df %>% 
-#     filter(Mean >= (k * 0.8)) %>% 
-#     slice_min(N_step, n = 1) %>%
-#     pull(N_step)
-#   
-#   ggplot(plot_df, aes(x = N_step, y = Mean)) +
-#     geom_crossbar(aes(x = N_step, ymin = QR1, ymax = QR3)) +
-#     geom_point(shape = 19, colour = "firebrick") +
-#     geom_vline(xintercept = min_step, linetype = "dashed", colour = "black") +
-#     geom_hline(yintercept = (k * 0.8), linetype = "dashed", colour = "black") +
-#     ylim(c(0, k)) +
-#     ylab(expr("Top"[!!k])) +
-#     xlab("Count of sampled experiments") +
-#     ggtitle(gene) +
-#     theme_classic() +
-#     theme(text = element_text(size = 30),
-#           axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1),
-#           plot.margin = margin(10, 20, 10, 10))
-# }
 
 
 gene <- "Runx1"
