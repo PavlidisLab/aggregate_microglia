@@ -98,7 +98,7 @@ save_coexpr_multi_dataset(
   input_df = mcg_meta_hg,
   pc_df = pc_hg,
   cor_method = "pearson",
-  out_dir = cmat_dir_hg
+  out_dir = cmat_dir_mcg_hg
 )
 
 
@@ -107,7 +107,7 @@ save_coexpr_multi_dataset(
   input_df = mcg_meta_mm,
   pc_df = pc_mm,
   cor_method = "pearson",
-  out_dir = cmat_dir_mm
+  out_dir = cmat_dir_mcg_mm
 )
 
 
@@ -117,7 +117,7 @@ save_coexpr_multi_dataset(
   input_df = macro_meta_hg,
   pc_df = pc_hg,
   cor_method = "pearson",
-  out_dir = "/space/scratch/amorin/aggregate_microglia/Cormats/Macrophage_hg"
+  out_dir = cmat_dir_macro_hg
 )
 
 
@@ -126,5 +126,5 @@ save_coexpr_multi_dataset(
   input_df = macro_meta_mm,
   pc_df = pc_mm,
   cor_method = "pearson",
-  out_dir = "/space/scratch/amorin/aggregate_microglia/Cormats/Macrophage_mm"
+  out_dir = cmat_dir_macro_mm
 )
