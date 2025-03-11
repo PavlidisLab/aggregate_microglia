@@ -1,9 +1,8 @@
-## TODO
+## Aggregate human and mouse microglial CSCORE output using the allrank strategy
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
-# library(aggtools)
-source("/home/amorin/Projects/aggtools/R/aggregate_functions.R")
+library(aggtools)
 source("R/00_config.R")
 source("R/utils/functions.R")
 

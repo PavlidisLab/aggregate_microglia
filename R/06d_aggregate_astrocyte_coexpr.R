@@ -1,4 +1,4 @@
-## TODO:
+## Saving out astrocyte aggregates
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -19,8 +19,8 @@ meta_mm <- filter(meta, Species == "Mouse")
 fz_path_hg <- "/space/scratch/amorin/aggregate_microglia/Cormats/Astrocyte_hg/aggregate_cormat_FZ_astrocyte_hg.RDS"
 fz_path_mm <- "/space/scratch/amorin/aggregate_microglia/Cormats/Astrocyte_mm/aggregate_cormat_FZ_astrocyte_mm.RDS"
 
-rsr_path_hg <- "/space/scratch/amorin/aggregate_microglia/Cormats/Astrocyte_hg/aggregate_cormat_RSR_astrocyte_hg.RDS"
-rsr_path_mm <- "/space/scratch/amorin/aggregate_microglia/Cormats/Astrocyte_mm/aggregate_cormat_RSR_astrocyte_mm.RDS"
+allrank_path_hg <- "/space/scratch/amorin/aggregate_microglia/Cormats/Astrocyte_hg/aggregate_cormat_allrank_astrocyte_hg.RDS"
+allrank_path_mm <- "/space/scratch/amorin/aggregate_microglia/Cormats/Astrocyte_mm/aggregate_cormat_allrank_astrocyte_mm.RDS"
 
 
 
@@ -30,7 +30,7 @@ rsr_path_mm <- "/space/scratch/amorin/aggregate_microglia/Cormats/Astrocyte_mm/a
 
 # Human allrank
 save_function_results(
-  path = rsr_path_hg,
+  path = allrank_path_hg,
   fun = aggr_coexpr_multi_dataset,
   args = list(
     input_df = meta_hg,
@@ -57,7 +57,7 @@ save_function_results(
 
 # Mouse allrank
 save_function_results(
-  path = rsr_path_mm,
+  path = allrank_path_mm,
   fun = aggr_coexpr_multi_dataset,
   args = list(
     input_df = meta_mm,
