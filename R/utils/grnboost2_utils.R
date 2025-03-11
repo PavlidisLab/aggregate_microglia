@@ -84,7 +84,6 @@ fread_mat <- function(path) {
 average_and_save_each_network <- function(ids, 
                                           grn_dir, 
                                           ncore, 
-                                          # force_resave = FALSE) {
                                           n_iter = 100) {
   
   avg_grn_l <- lapply(ids, function(id) {
