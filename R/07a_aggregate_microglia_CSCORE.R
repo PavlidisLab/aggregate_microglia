@@ -1,4 +1,5 @@
-## Aggregate human and mouse microglial CSCORE output using the allrank strategy
+## Aggregate human and mouse microglial CSCORE output. This script requires that
+## all microglial dataset processing scripts in R/CSCORE/ have been ran.
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -14,26 +15,15 @@ pc_mm <- read.delim(ref_mm_path)
 # List of measurement info to keep filtered genes
 count_summ <- readRDS(mcg_count_summ_list_path)
 
-# Completed IDs
+# Dataset IDs and ensure CSCORE has been ran for each 
 ids_hg <- filter(mcg_meta, Species == "Human")$ID
 ids_mm <- filter(mcg_meta, Species == "Mouse")$ID
 dat_paths <- list.files(dat_dir)
-comp_ids_hg <- intersect(ids_hg, str_replace_all(dat_paths, "_CSCORE.RDS", ""))
-comp_ids_mm <- intersect(ids_mm, str_replace_all(dat_paths, "_CSCORE.RDS", ""))
+stopifnot(all(paste0(c(ids_hg, ids_mm), "_CSCORE.RDS") %in% dat_paths))
 
-# Outpaths
-cscore_hg_path <- file.path(data_out_dir, "CSCORE_aggregate_microglia_hg.RDS")
-cscore_mm_path <- file.path(data_out_dir, "CSCORE_aggregate_microglia_mm.RDS")
-
-
-# Min genes to keep
-keep_hg <- count_summ$Human$Summ_df %>% 
-  filter(N_msr >= floor(max(N_msr) * 1/3)) %>%
-  select(Symbol)
-
-keep_mm <- count_summ$Mouse$Summ_df %>% 
-  filter(N_msr >= floor(max(N_msr) * 1/3)) %>%
-  select(Symbol)
+# Genes to keep after filtering
+keep_hg <- count_summ$Human$Filter_genes
+keep_mm <- count_summ$Mouse$Filter_genes 
 
 
 # Here aggregating using all rank approach
@@ -87,7 +77,7 @@ save_function_results(
   path = cscore_hg_path,
   fun = aggregate_cscore,
   args = list(
-    ids = comp_ids_hg,
+    ids = ids_hg,
     dat_dir = dat_dir,
     gene_df = keep_hg
   )
@@ -99,7 +89,7 @@ save_function_results(
   path = cscore_mm_path,
   fun = aggregate_cscore,
   args = list(
-    ids = comp_ids_mm,
+    ids = ids_mm,
     dat_dir = dat_dir,
     gene_df = keep_mm
   )
