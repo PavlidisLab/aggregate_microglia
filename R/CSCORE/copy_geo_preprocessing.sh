@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# This script was used to modify as much as I could of the GEO processing 
+# processing scripts from TRsc to adapt to CSCORE
+
 input_file=$1
 input_dir="/home/amorin/Projects/TR_singlecell/R/preprocessing_scripts/CPM"
 output_dir="/home/amorin/Projects/aggregate_microglia/R/CSCORE/test"
@@ -37,15 +40,3 @@ outfile <- file.path(data_out_dir, "CSCORE", paste0(id, "_CSCORE.RDS"))' \
     echo "$modified_content" > "$output_filename"
 
 done < "$input_file"
-
-
-
-
-# while IFS=$'\t' read -r id; do
-# 
-#     in_file="${input_dir}/${id}_cpm.R"
-#     out_file="${output_dir}/${id}.R"
-# 
-#     echo "Beginning $out_file"
-# 
-# done < "$input_file"
