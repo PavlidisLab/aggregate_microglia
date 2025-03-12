@@ -1,4 +1,5 @@
-## TODO:
+## Basic summarization of individual coexpr mats. Original idea was to explore
+## the most variable gene coexpression pairs across datasets; didn't get far
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -12,12 +13,13 @@ source("R/utils/functions.R")
 pc_df_hg <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
 pc_df_mm <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
 
-cor_paths_hg <- list.files(cmat_dir_hg, full.names = TRUE, pattern = "cormat.tsv")
-cor_paths_mm <- list.files(cmat_dir_mm, full.names = TRUE, pattern = "cormat.tsv")
+# Paths of individual coexpression matrices
+cor_paths_hg <- list.files(cmat_dir_mcg_hg, full.names = TRUE, pattern = "cormat.tsv")
+cor_paths_mm <- list.files(cmat_dir_mcg_mm, full.names = TRUE, pattern = "cormat.tsv")
 
-outfile_hg <- file.path(cmat_dir_hg, "raw_cor_avg_sd_msr_cv_list_hg.RDS")
-outfile_mm <- file.path(cmat_dir_mm, "raw_cor_avg_sd_msr_cv_list_mm.RDS")
-
+# Output summary objects
+outfile_hg <- file.path(cmat_dir_mcg_hg, "raw_cor_avg_sd_msr_cv_list_hg.RDS")
+outfile_mm <- file.path(cmat_dir_mcg_mm, "raw_cor_avg_sd_msr_cv_list_mm.RDS")
 
 # Microglia meta with file paths
 mcg_meta <- read.delim(mcg_meta_path) %>% distinct(ID, .keep_all = TRUE)
@@ -25,9 +27,12 @@ meta_hg <- filter(mcg_meta, Species == "Human")
 meta_mm <- filter(mcg_meta, Species == "Mouse")
 
 
+# Functions
+# ------------------------------------------------------------------------------
 
 
-# TODO:
+# Iteratively load each coexpr mat for averaging. Same idea as aggregation, minus
+# FZ or ranking
 
 calc_avg_and_na <- function(paths, pc_df, verbose = TRUE) {
   
@@ -50,6 +55,7 @@ calc_avg_and_na <- function(paths, pc_df, verbose = TRUE) {
 }
 
 
+# Iteratively load each coexpr mat for calculating std. dev.
 
 calc_sd <- function(paths, pc_df, avg_l, verbose = TRUE) {
   
@@ -73,6 +79,7 @@ calc_sd <- function(paths, pc_df, avg_l, verbose = TRUE) {
 }
 
 
+# Calc avg, SD, and CV for each gene pair across datasets
 
 prepare_summary_l <- function(paths, pc_df, verbose = TRUE) {
   
@@ -86,7 +93,11 @@ prepare_summary_l <- function(paths, pc_df, verbose = TRUE) {
 }
 
 
- 
+
+# Run/save/load
+# ------------------------------------------------------------------------------
+
+
 save_function_results(
   path = outfile_hg,
   fun = prepare_summary_l,
@@ -108,8 +119,8 @@ summ_mm <- readRDS(outfile_mm)
 
 
 
-##
-
+# Basic exploration
+# ------------------------------------------------------------------------------
 
 
 summ_df_hg <- cbind(
@@ -133,59 +144,27 @@ summ_df_mm <- cbind(
 
 
 top_avg_hg <- summ_df_hg %>% 
-  filter(N_msr > floor(nrow(meta_hg) * 1/3)) %>% 
+  filter(N_msr >= floor(nrow(meta_hg) * min_msr_frac)) %>% 
   slice_max(abs(Avg), n = 10e3)
 
 top_sd_hg <- summ_df_hg %>% 
-  filter(N_msr > floor(nrow(meta_hg) * 1/3)) %>% 
+  filter(N_msr >= floor(nrow(meta_hg) * min_msr_frac)) %>% 
   slice_max(SD, n = 10e3)
 
 top_cv_hg <- summ_df_hg %>% 
-  filter(N_msr > floor(nrow(meta_hg) * 1/3)) %>% 
+  filter(N_msr >= floor(nrow(meta_hg) * min_msr_frac)) %>% 
   slice_max(CV, n = 10e3)
 
 
 
 top_avg_mm <- summ_df_mm %>% 
-  filter(N_msr > floor(nrow(meta_mm) * 1/3)) %>% 
+  filter(N_msr >= floor(nrow(meta_mm) * min_msr_frac)) %>% 
   slice_max(abs(Avg), n = 10e3)
 
 top_sd_mm <- summ_df_mm %>% 
-  filter(N_msr > floor(nrow(meta_mm) * 1/3)) %>% 
+  filter(N_msr >= floor(nrow(meta_mm) * min_msr_frac)) %>% 
   slice_max(SD, n = 10e3)
 
 top_cv_mm <- summ_df_mm %>% 
-  filter(N_msr > floor(nrow(meta_mm) * 1/3)) %>% 
+  filter(N_msr >= floor(nrow(meta_mm) * min_msr_frac)) %>% 
   slice_max(CV, n = 10e3)
-
-
-
-
-
-cor.test(
-  filter(summ_df_hg, N_msr > 5)[["Avg"]],
-  filter(summ_df_hg, N_msr > 5)[["SD"]],
-  method = "spearman"
-)
-
-
-
-cor.test(
-  filter(summ_df_mm, N_msr > 5)[["Avg"]],
-  filter(summ_df_mm, N_msr > 5)[["SD"]],
-  method = "spearman"
-)
-
-
-
-ggplot(top_avg_hg, aes(x = Avg, y = SD)) +
-  geom_point(shape = 21, alpha = 0.5) +
-  theme_classic() +
-  theme(text = element_text(size = 25))
-
-
-
-ggplot(top_avg_mm, aes(x = Avg, y = SD)) +
-  geom_point(shape = 21, alpha = 0.5) +
-  theme_classic() +
-  theme(text = element_text(size = 25))
