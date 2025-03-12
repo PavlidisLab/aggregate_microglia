@@ -1,4 +1,6 @@
-## This script performs a saturation analysis
+## This script performs a saturation analysis on the mouse microglia FZ agg. In
+## increasing steps, it samples datasets, aggregates them, and compares the
+## subset aggregate profile to that of the final aggregate.
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -25,28 +27,29 @@ pc_mm <- read.delim(ref_mm_path)
 tfs_mm <- read.delim(tfs_mm_path)
 
 # The final aggregate/global profile used for comparison
-agg_mm <- readRDS("/space/scratch/amorin/aggregate_microglia/Cormats/Mm_pcor/aggregate_cormat_FZ_mm.RDS")
+agg_mm <- readRDS(mcg_fz_mm_path)
 
 # List of measurement info to keep filtered genes
 count_summ <- readRDS(mcg_count_summ_list_path)
 
-# Directory and file pattern for saved raw correlation matrices 
-cmat_dir_mm <- "/space/scratch/amorin/aggregate_microglia/Cormats/Mm_pcor/"
-pattern <- "_cormat.tsv"
+# File pattern for saved raw correlation matrices 
+cmat_pattern <- "_cormat.tsv"
 
 # Output paths
 ind_topk_mm_path <- file.path(data_out_dir, "microglia_individual_dataset_topk_mm.RDS")
 saturation_mm_path <- file.path(data_out_dir, "microglia_coexpr_saturation_mm.RDS")
+
+# Subsampling steps
+steps <- 2:(length(ids_mm) - 1)
+
 
 
 # Functions
 # ------------------------------------------------------------------------------
 
 
-
 # Loads aggregate correlation matrices or NA count matrices for the given dataset
 # ids into a list. 
-# Pattern: "_NA_mat.tsv" for NA counts
 
 load_mat_to_list  <- function(ids,
                               dir,
@@ -93,7 +96,6 @@ load_or_generate_agg <- function(path,
   
   return(agg_l)
 }
-
 
 
 
@@ -155,8 +157,8 @@ msr_mm <- count_summ$Mouse$Summ_df
 
 # Load and ready all correlation matrices
 cmat_l <- load_mat_to_list(ids = ids_mm,
-                           dir = cmat_dir_mm,
-                           pattern = pattern,
+                           dir = cmat_dir_mcg_mm,
+                           pattern = cmat_pattern,
                            genes = pc_mm$Symbol,
                            sub_genes = tfs_mm$Symbol)
 
@@ -176,6 +178,7 @@ if (!file.exists(ind_topk_mm_path)) {
   
   # TopK overlap of each individual dataset with the global
   ind_topk_l <- lapply(cmat_l, function(mat) {
+    
     pair_colwise_topk(mat1 = mat,
                       mat2 = agg_mat_mm,
                       k = k,
@@ -188,13 +191,6 @@ if (!file.exists(ind_topk_mm_path)) {
   
 }
 
-
-
- 
-
-# TODO: function
-
-steps <- 2:(length(ids_mm) - 1)
 
 
 
@@ -235,10 +231,9 @@ step_l <- mclapply(keep_tfs_mm, function(tf) {
 names(step_l) <- keep_tfs_mm
 
 
+
+
 saveRDS(step_l, saturation_mm_path)
-
-
-
 
 
 ind_topk_mat <- readRDS(ind_topk_mm_path)
