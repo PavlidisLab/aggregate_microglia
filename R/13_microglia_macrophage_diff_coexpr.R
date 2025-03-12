@@ -1,3 +1,12 @@
+## This script explores performing differential coexpression between microglia
+## and macrophage coexpression in three different ways:
+## 1) Rank differences of the respective aggregates. Permutation/shuffle for null.
+## 2) Linear model using underlying FZ values from each dataset
+## 3) Another linear model that attempts to control for differential expression.
+## In addition, it perform diff *expression* between the cell types using limma.
+## The focus here is on mouse data, given there is more microglia data
+## -----------------------------------------------------------------------------
+
 library(tidyverse)
 library(data.table)
 library(aggtools)
@@ -6,35 +15,49 @@ library(parallel)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
+set.seed(15)
+
+# Gene tables
 pc_mm <- read.delim(ref_mm_path)
 tfs_mm <- read.delim(tfs_mm_path)
 
+# Dataset meta
 mcg_meta <- read.delim(mcg_meta_dedup_path)
 macro_meta <- read.delim(macro_meta_dedup_path)
 
+# Lists of gene count measurement summaries
 mcg_summ <- readRDS(mcg_count_summ_list_path)
 macro_summ <- readRDS(macro_count_summ_list_path)
 
-mcg_agg <- readRDS("/space/scratch/amorin/aggregate_microglia/Cormats/Mm_pcor/aggregate_cormat_FZ_mm.RDS")
-macro_agg <- readRDS("/space/scratch/amorin/aggregate_microglia/Cormats/Macrophage_mm/aggregate_cormat_FZ_macrophage_mm.RDS")
+# Aggregates: focus on FZ
+mcg_agg <- readRDS(mcg_fz_mm_path)
+macro_agg <- readRDS(macro_fz_mm_path)
 
-mcg_cmat_paths <- list.files("/space/scratch/amorin/aggregate_microglia/Cormats/Mm_pcor/", pattern = "_cormat.tsv", full.names = TRUE)
-macro_cmat_paths <- list.files("/space/scratch/amorin/aggregate_microglia/Cormats/Macrophage_mm/", pattern = "_cormat.tsv", full.names = TRUE)
+# Paths of the individual coexpr matrices
+mcg_cmat_paths <- list.files(cmat_dir_mcg_mm, pattern = "_cormat.tsv", full.names = TRUE)
+macro_cmat_paths <- list.files(cmat_dir_macro_mm, pattern = "_cormat.tsv", full.names = TRUE)
 
+# Path for list of coexpr mats together (faster to load than individual)
+mcg_macro_tf_cmat_l_path <- file.path(data_out_dir, "mcg_macro_cmat_l.RDS")
 
+# Considering only genes that met measurement filter in micro and macro
 keep_genes <- intersect(mcg_summ$Mouse$Filter_genes, macro_summ$Mouse$Filter_genes)
 keep_tfs <- intersect(keep_genes, tfs_mm$Symbol)
 
+# Isolated agg matrices with kept genes
 mcg_mat <- mcg_agg$Agg_mat[keep_genes, keep_genes]
 macro_mat <- macro_agg$Agg_mat[keep_genes, keep_genes]
 
-mcg_macro_tf_cmat_l_path <- "/space/scratch/amorin/aggregate_microglia/mcg_macro_cmat_l.RDS"
 
+# This is the TF that will be inspected
+check_tf <- "Maf"
 
 
 # Functions
 # ------------------------------------------------------------------------------
 
+
+# Load raw correlation, FZ transform, and NA/inf to 0s
 
 load_fz_mat <- function(path, keep_genes, sub_genes) {
   
@@ -48,6 +71,7 @@ load_fz_mat <- function(path, keep_genes, sub_genes) {
 }
 
 
+# Load all FZ mats into a list
 
 load_all_fz_mat <- function(paths, keep_genes, sub_genes) {
   mat_l <- lapply(paths, load_fz_mat, keep_genes, sub_genes)
@@ -56,6 +80,7 @@ load_all_fz_mat <- function(paths, keep_genes, sub_genes) {
 }
 
 
+# For a given TF, load its profiles across datasets into one matrix
 
 prepare_tf_mat <- function(tf, mcg_l, macro_l) {
   
@@ -72,6 +97,72 @@ prepare_tf_mat <- function(tf, mcg_l, macro_l) {
 }
 
 
+# Null rank differences by permuting datasets
+
+generate_null_diffrank <- function(check_tf, mcg_l, macro_l, iters = 1000) {
+  
+  # Ready TF matrix and get the indices of micro/macro profiles
+  tf_mat <- prepare_tf_mat(check_tf, mcg_l, macro_l)
+  mcg_ix <- which(str_detect(colnames(tf_mat),  "Microglia"))
+  macro_ix <- which(str_detect(colnames(tf_mat),  "Macrophage"))
+  
+  # Iteratively sample datasets and then average, rank, and take difference
+  null_diffrank <- mclapply(1:iters, function(x) {
+    
+    sample_ix <-  sample(1:ncol(tf_mat), ncol(tf_mat), replace = FALSE)
+    group1 <- sample_ix[1:length(mcg_ix)]
+    group2 <- sample_ix[length(mcg_ix) + 1:length(macro_ix)]
+    
+    avg_group1 <- rowMeans(tf_mat[, group1])
+    rank_group1 <- rank(-avg_group1, ties.method = "min")
+    
+    avg_group2 <- rowMeans(tf_mat[, group2])
+    rank_group2 <- rank(-avg_group2, ties.method = "min")
+    
+    diff <- rank_group1 - rank_group2
+    
+  }, mc.cores = ncore)
+  
+  
+  null_diffrank <- do.call(cbind, null_diffrank)
+  
+  return(null_diffrank)
+  
+}
+
+
+# Summarize null rank differences in three ways: 
+# Z scores: (Observed difference - mean null difference) / s.d of null
+# Fold change: Observed difference / mean null difference
+# Empirical pval: Proportion of absolute observed differences less than all absolute nulls
+
+summarize_diffrank <- function(diffrank_df, keep_genes, null_diffrank, iters = 1000) {
+  
+  summ_null_diffrank <- lapply(keep_genes, function(gene) {
+    
+    obs <- diffrank_df[gene, "Diff"]
+    null <- null_diffrank[gene, ]
+    null_mean <- mean(null)
+    
+    pval <- sum(abs(obs) <= abs(null)) / iters
+    z <- (obs - null_mean) / sd(null)
+    fc <- obs / null_mean
+    
+    data.frame(Symbol = gene, 
+               Diff = obs,
+               Mean_null_diff = null_mean,
+               Pval_diff = pval, 
+               Z_diff = z, 
+               FC_diff = fc)
+    
+  }) %>% # Join comparison to null with diff rank df
+    do.call(rbind, .) %>% 
+    left_join(., diffrank_df, by = c("Symbol", "Diff"))
+  
+}
+
+
+# Use limma to fit diff coexpr model of cell type status w/o expression covariates
 
 fit_model <- function(tf_mat) {
   
@@ -91,6 +182,8 @@ fit_model <- function(tf_mat) {
 
 
 
+# Fit limma diff coexpr model over all TFs
+
 fit_all_model <- function(mcg_l, macro_l, tfs, ncore = 1) {
   
   res_l <- mclapply(tfs, function(tf) {
@@ -103,6 +196,8 @@ fit_all_model <- function(mcg_l, macro_l, tfs, ncore = 1) {
 }
 
 
+# For a given TF, ready a dataframe that includes expression info to perform
+# diff coexpr while controlling for expression
 
 prepare_gene_df <- function(tf, gene, mcg_l, macro_l, expr_mat) {
   
@@ -129,8 +224,9 @@ prepare_gene_df <- function(tf, gene, mcg_l, macro_l, expr_mat) {
 
 
 
-# Load individual FZ mats for microglia and macrophage
+# Load individual FZ mats for microglia and macrophage into a list
 # ------------------------------------------------------------------------------
+
 
 if (!file.exists(mcg_macro_tf_cmat_l_path)) {
   
@@ -148,7 +244,9 @@ if (!file.exists(mcg_macro_tf_cmat_l_path)) {
 
 
 
-# Inspecting rank differences of aggregate
+# Differential coexpression via rank differences between aggregates. Note that
+# here, I am taking the FZ aggregates, then *column* ranking each (i.e., each
+# TR profile is ranked individually), and the taking the difference.
 # ------------------------------------------------------------------------------
 
 
@@ -156,8 +254,6 @@ mcg_rank_mat <- colrank_mat(mcg_mat)
 macro_rank_mat <- colrank_mat(macro_mat)
 diff_mat <- mcg_rank_mat - macro_rank_mat
 
-
-check_tf <- "Mef2c"
 
 
 # Scaling rank difference to -1 and 1
@@ -179,113 +275,29 @@ diffrank_df$Scale_diff <- rescale_minMax(diffrank_df$Diff)
 
 
 
-
-# ggplot(diffrank_df, aes(x = Diff)) +
-ggplot(diffrank_df, aes(x = Scale_diff)) +
-  geom_histogram(bins = 100) +
-  ylab("Count of genes") +
-  xlab("Diff. rank of aggregate coexpr") +
-  ggtitle(check_tf) +
-  theme_classic() +
-  theme(text = element_text(size = 25))
-
-
-# Null rank differences by permuting datasets
-
-
-tf_mat <- prepare_tf_mat(check_tf, mcg_l, macro_l)
-
-mcg_ix <- which(str_detect(colnames(tf_mat),  "Microglia"))
-macro_ix <- which(str_detect(colnames(tf_mat),  "Macrophage"))
-
-
-set.seed(15)
-
-
-null_diffrank <- mclapply(1:1000, function(x) {
-  
-  sample_ix <-  sample(1:ncol(tf_mat), ncol(tf_mat), replace = FALSE)
-  group1 <- sample_ix[1:length(mcg_ix)]
-  group2 <- sample_ix[length(mcg_ix) + 1:length(macro_ix)]
-  
-  avg_group1 <- rowMeans(tf_mat[, group1])
-  rank_group1 <- rank(-avg_group1, ties.method = "min")
-  
-  avg_group2 <- rowMeans(tf_mat[, group2])
-  rank_group2 <- rank(-avg_group2, ties.method = "min")
-  
-  diff <- rank_group1 - rank_group2
-
-  
-}, mc.cores = ncore)
-
-
-null_diffrank <- do.call(cbind, null_diffrank)
-# null_diff_scale <- apply(null_diff, 2, rescale_minMax)
+null_diffrank <- generate_null_diffrank(check_tf, mcg_l, macro_l)
+diffrank_df <- summarize_diffrank(diffrank_df, keep_genes, null_diffrank)
 
 
 
-summ_null_diffrank <- lapply(keep_genes, function(gene) {
-  
-  obs <- diffrank_df[gene, "Diff"]
-  null <- null_diffrank[gene, ]
-  null_mean <- mean(null)
-  
-  pval <- sum(abs(obs) <= abs(null)) / 1000
-  z <- (obs - null_mean) / sd(null)
-  fc <- obs / null_mean
-  
-  data.frame(Symbol = gene, 
-             Diff = obs,
-             Mean_null_diff = null_mean,
-             Pval_diff = pval, 
-             Z_diff = z, 
-             FC_diff = fc)
-  
-}) %>% 
-  do.call(rbind, .) %>% 
-  left_join(., diffrank_df, by = c("Symbol", "Diff"))
-
-
-
-
-
-
-
-# TODO: figure out why this isn't identical
-# plot(rowMeans(tf_mat[keep_genes, mcg_ix]), mcg_mat[keep_genes, check_tf])
-# 
-# 
-# plot(
-#   rank(-rowMeans(tf_mat[keep_genes, mcg_ix]), ties.method = "min"),
-#   diffrank_df[keep_genes, "Agg_mcg"]
-# )
-
-
-
-
-# Running diff coexpr using limma -- here no accountng for expression
+# Running diff coexpr using limma -- here not accounting for expression
 # ------------------------------------------------------------------------------
 
 
 res_l <- fit_all_model(mcg_l, macro_l, keep_tfs, ncore)
 
 
-
 # Count of genes differentially coexpressed
 n_sig <- sapply(res_l, function(x) sum(x$adj.P.Val < 0.05, na.rm = TRUE))
-sum(n_sig > 0) / length(n_sig)
-summary(n_sig)
-hist(n_sig, breaks = 100)
+prop_sig <- sum(n_sig > 0) / length(n_sig)
 
 
 
-
-# Are there any significant TF-gene pairs that don't have sig expr changes
+# Perform differential *expression* between microglia and macrophages, using
+# the averaged/pseudobulked log2 cpm quantile norm'd data
 # ------------------------------------------------------------------------------
 
 
-# First perform DE between microglia and macrophage pseudobulks
 # No voom since data on hand is log2CPM
 
 expr_mat <- cbind(mcg_summ$Mouse$QN_Avg[keep_genes, ], 
@@ -311,18 +323,16 @@ expr_res <- topTable(expr_fit,
 
 
 
-ggplot(expr_res, aes(x = logFC, y = -log10(adj.P.Val))) +
-  geom_point(shape = 21, size = 2.4, alpha = 0.4) +
-  geom_hline(yintercept = -log10(0.05)) +
-  theme_classic() +
-  theme(text = element_text(size = 25))
+
+# Are there any significant TF-gene pairs that don't have sig expr changes?
 
 
-
-# Iterate through diff coexpr pairs, checking if TF and genes are DE
-
+# TFs that have at least 1 sig diff coexpr. gene (not controlling for expression)
 diff_tfs <- names(which(n_sig > 0))
 
+
+# Iterate through diff coexpr pairs, checking whether the TF itself is DE and 
+# counting how many of its diff coexpr. genes are also DE
 
 diff_l <- lapply(diff_tfs, function(tf) {
   
@@ -345,123 +355,24 @@ diff_l <- lapply(diff_tfs, function(tf) {
 diff_df <- do.call(rbind, diff_l)
 
 
+# Count of TFs that were themselves DE
 n_tf_de <- sum(diff_df$TF_FDR < 0.05)
 
 
-ggplot(diff_df, aes(x = TF_FC, y = -log10(TF_FDR))) +
-  geom_point(shape = 21, size = 2.4) +
-  geom_hline(yintercept = -log10(0.05)) +
-  theme_classic() +
-  theme(text = element_text(size = 25))
+# Looking for genes that are diff coexpressed but not diff. expressed for check tf
 
-
-
-
-
-
-# Manual inspection and plotting of individual TFs
-# ------------------------------------------------------------------------------
-
-
-# Pval hist
-
-ggplot(res_l[[check_tf]], aes(x = P.Value)) +
-  geom_histogram(bins = 100) +
-  ggtitle(paste0(check_tf, " differential coexpression")) +
-  theme_classic() +
-  theme(text = element_text(size = 25))
+dc_not_de <- res_l[[check_tf]] %>% 
+  left_join(., expr_res, by = "Symbol", suffix = c("_DC", "_DE")) %>% 
+  filter(adj.P.Val_DC < 0.05 & adj.P.Val_DE > 0.05) %>% 
+  slice_max(abs(logFC_DC), n = 10)
   
 
-# Volcano plot
-ggplot(res_l[[check_tf]], aes(x = logFC, y = -log10(adj.P.Val))) +
-  geom_point(shape = 21, size = 2.4, alpha = 0.4) +
-  geom_hline(yintercept = -log10(0.05)) +
-  ggtitle(paste0(check_tf, " differential coexpression")) +
-  theme_classic() +
-  theme(text = element_text(size = 25))
 
-
-# Inpsecting values for an individual TF-gene pair
-check_gene <- "Dab2"
-
-
-check_df <- prepare_gene_df(check_tf, check_gene, mcg_l, macro_l, expr_mat)
-
-
-
-tf_pval <- filter(expr_res, Symbol == check_tf)$adj.P.Val
-# suppressWarnings(wilcox.test(check_df$Expr_TF ~ check_df$CT))
-
-gene_pval <- filter(expr_res, Symbol == check_gene)$adj.P.Val
-# suppressWarnings(wilcox.test(check_df$Expr_gene ~ check_df$CT))
-
-
-
-pxa <- ggplot(check_df, aes(x = CT, y = FZ)) +
-  geom_boxplot(width = 0.2, outlier.shape = NA) +
-  geom_jitter(shape = 21, size = 1.8, alpha = 0.6, fill = "slategrey", width = 0.05) +
-  ggtitle(paste0(check_tf, " - ", check_gene, " coexpr.")) +
-  xlab(NULL) +
-  theme_classic() +
-  theme(text = element_text(size = 20))
-
-
-
-pxb <- ggplot(check_df, aes(x = CT, y = Expr_TF)) +
-  geom_boxplot(width = 0.2, outlier.shape = NA) +
-  geom_jitter(shape = 21, size = 1.8, alpha = 0.6, fill = "slategrey", width = 0.05) +
-  labs(
-    y = "Average log2 CPM",
-    x = NULL,
-    title = paste0(check_tf, " expression"), 
-    subtitle = paste0("Adj. pval=", signif(tf_pval, digits = 3))) +
-  theme_classic() +
-  theme(text = element_text(size = 20))
-
-
-
-pxc <- ggplot(check_df, aes(x = CT, y = Expr_gene)) +
-  geom_boxplot(width = 0.2, outlier.shape = NA) +
-  geom_jitter(shape = 21, size = 1.8, alpha = 0.6, fill = "slategrey", width = 0.05) +
-  labs(
-    y = "Average log2 CPM",
-    x = NULL,
-    title = paste0(check_gene, " expression"), 
-    subtitle = paste0("Adj. pval=", signif(gene_pval, digits = 3))) +
-  theme_classic() +
-  theme(text = element_text(size = 20))
-
-
-egg::ggarrange(pxa, pxb, pxc, nrow = 1)
-
-
-
-
-
-# Looking for genes that are diff coexpressed but not diff. expressed
-
-
-res_df <- left_join(res_l[[check_tf]], expr_res, 
-                    by = "Symbol", suffix = c("_DC", "_DE"))
-
-
-res_df %>% 
-  filter(adj.P.Val_DC < 0.05 & adj.P.Val_DE > 0.05) %>% 
-  slice_max(logFC_DC, n = 10)
-
-
-
-# Checking adding difference in expression to diff coexpr model
-# TODO: can this work for limma?
+# Adding expression covariates into a differential coexpression model
+# NOTE: I couldn't figure out how to build the design that includes feature/gene
+# level covariates for limma, so this is done iteratively per TF using lm().
 # -----------------------------------------------------------------------------
 
-
-
-# filter(check_df, CT == "Microglia", ID == "Microglia_GSE102827")
-# mcg_summ$Mouse$QN_Avg[check_gene, "GSE102827"]
-# mcg_summ$Mouse$QN_Avg[check_tf, "GSE102827"]
-# mcg_summ$Mouse$QN_Avg[check_gene, "GSE102827"] + mcg_summ$Mouse$QN_Avg[check_tf, "GSE102827"]
-# mcg_summ$Mouse$QN_Avg[check_gene, "GSE102827"] - mcg_summ$Mouse$QN_Avg[check_tf, "GSE102827"]
 
 
 
@@ -700,3 +611,97 @@ tf_df$FZ_corrected <- residuals_expr_corrected
 
 boxplot(FZ ~ Cell_type, data = tf_df)
 boxplot(FZ_corrected ~ Cell_type, data = tf_df)
+
+
+
+
+# Plots 
+# ------------------------------------------------------------------------------
+
+
+# Histogram of rank differences for check tf
+p1 <- ggplot(diffrank_df, aes(x = Scale_diff)) +
+  geom_histogram(bins = 100) +
+  ylab("Count of genes") +
+  xlab("Diff. rank of aggregate coexpr") +
+  ggtitle(check_tf) +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+# Volcano plot of DE between micro and macro
+p2 <- ggplot(expr_res, aes(x = logFC, y = -log10(adj.P.Val))) +
+  geom_point(shape = 21, size = 2.4, alpha = 0.4) +
+  geom_hline(yintercept = -log10(0.05)) +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+# Volcano plot of DE focused on TFs
+p3 <- ggplot(diff_df, aes(x = TF_FC, y = -log10(TF_FDR))) +
+  geom_point(shape = 21, size = 2.4) +
+  geom_hline(yintercept = -log10(0.05)) +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+# Pval hist of diff coexpr (-expr covariates for check tf)
+p4a <- ggplot(res_l[[check_tf]], aes(x = P.Value)) +
+  geom_histogram(bins = 100) +
+  ggtitle(paste0(check_tf, " differential coexpression")) +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+  
+
+# Volcano plot of diff coexpr (-expr covariates for check tf)
+p4b <- ggplot(res_l[[check_tf]], aes(x = logFC, y = -log10(adj.P.Val))) +
+  geom_point(shape = 21, size = 2.4, alpha = 0.4) +
+  geom_hline(yintercept = -log10(0.05)) +
+  ggtitle(paste0(check_tf, " differential coexpression")) +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+# Inspecting coexpr and expression values for an individual TF-gene pair
+
+check_gene <- "Timp2"
+check_df <- prepare_gene_df(check_tf, check_gene, mcg_l, macro_l, expr_mat)
+
+tf_pval <- filter(expr_res, Symbol == check_tf)$adj.P.Val
+gene_pval <- filter(expr_res, Symbol == check_gene)$adj.P.Val
+
+
+p5a <- ggplot(check_df, aes(x = CT, y = FZ)) +
+  geom_boxplot(width = 0.2, outlier.shape = NA) +
+  geom_jitter(shape = 21, size = 1.8, alpha = 0.6, fill = "slategrey", width = 0.05) +
+  ggtitle(paste0(check_tf, " - ", check_gene, " coexpr.")) +
+  xlab(NULL) +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+p5b <- ggplot(check_df, aes(x = CT, y = Expr_TF)) +
+  geom_boxplot(width = 0.2, outlier.shape = NA) +
+  geom_jitter(shape = 21, size = 1.8, alpha = 0.6, fill = "slategrey", width = 0.05) +
+  labs(
+    y = "Average log2 CPM",
+    x = NULL,
+    title = paste0(check_tf, " expression"), 
+    subtitle = paste0("Adj. pval=", signif(tf_pval, digits = 3))) +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+p5c <- ggplot(check_df, aes(x = CT, y = Expr_gene)) +
+  geom_boxplot(width = 0.2, outlier.shape = NA) +
+  geom_jitter(shape = 21, size = 1.8, alpha = 0.6, fill = "slategrey", width = 0.05) +
+  labs(
+    y = "Average log2 CPM",
+    x = NULL,
+    title = paste0(check_gene, " expression"), 
+    subtitle = paste0("Adj. pval=", signif(gene_pval, digits = 3))) +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+p5 <- egg::ggarrange(p5a, p5b, p5c, nrow = 1)
