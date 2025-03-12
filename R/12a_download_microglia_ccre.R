@@ -1,14 +1,12 @@
-# Microglia ccRE-gene correlations
-# Human paper https://www.science.org/doi/10.1126/science.adf7044
-# Mouse paper https://www.nature.com/articles/s41586-023-06824-9
-# Download home http://catlas.org/catlas_hub/
-
-# Note: human has file with stats (PCC and Pval) while mouse just has positions
-
-# http://catlas.org/catlas_downloads/humanbrain/conns/MGC.pos.stat.txt
-# http://catlas.org/catlas_downloads/humanbrain/conns/MGC.pos.bedpe
-# http://catlas.org/catlas_downloads/mousebrain/conns/MGL.pos.conns.bedpe
-# ------------------------------------------------------------------------------
+## Download Microglia ccRE-gene correlations from catlas
+## Human paper https://www.science.org/doi/10.1126/science.adf7044
+## Mouse paper https://www.nature.com/articles/s41586-023-06824-9
+## Download home http://catlas.org/catlas_hub/
+## Note: human has file with stats (PCC and Pval) while mouse just has positions
+## http://catlas.org/catlas_downloads/humanbrain/conns/MGC.pos.stat.txt
+## http://catlas.org/catlas_downloads/humanbrain/conns/MGC.pos.bedpe
+## http://catlas.org/catlas_downloads/mousebrain/conns/MGL.pos.conns.bedpe
+## -----------------------------------------------------------------------------
 
 library(tidyverse)
 source("R/00_config.R")
