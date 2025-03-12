@@ -26,10 +26,8 @@ ccre_mm <- read.delim(mcg_ccre_path_mm)
 bind_gr_hg <- readRDS(bind_gr_path_hg)
 bind_gr_mm <- readRDS(bind_gr_path_mm)
 
-# Bind matrices and metadata
-# bind_dat <- readRDS(bind_dat_path) # TODO: bind dat necessary?
+# Bind metadata
 bind_meta <- readRDS(bind_meta_path)
-
 
 # List of gene count measurement summaries
 count_summ <- readRDS(mcg_count_summ_list_path)
