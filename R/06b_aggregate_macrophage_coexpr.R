@@ -23,7 +23,7 @@ meta_mm <- filter(meta, Species == "Mouse")
 
 # Human allrank
 save_function_results(
-  path = macro_allrank_path_hg,
+  path = macro_allrank_hg_path,
   fun = aggr_coexpr_multi_dataset,
   args = list(
     input_df = meta_hg,
@@ -36,7 +36,7 @@ save_function_results(
 
 # Human FZ
 save_function_results(
-  path = macro_fz_path_hg,
+  path = macro_fz_hg_path,
   fun = aggr_coexpr_multi_dataset,
   args = list(
     input_df = meta_hg,
@@ -50,7 +50,7 @@ save_function_results(
 
 # Mouse allrank
 save_function_results(
-  path = macro_allrank_path_mm,
+  path = macro_allrank_mm_path,
   fun = aggr_coexpr_multi_dataset,
   args = list(
     input_df = meta_mm,
@@ -63,7 +63,7 @@ save_function_results(
 
 # Mouse FZ
 save_function_results(
-  path = macro_fz_path_mm,
+  path = macro_fz_mm_path,
   fun = aggr_coexpr_multi_dataset,
   args = list(
     input_df = meta_mm,
