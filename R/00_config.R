@@ -35,7 +35,10 @@ if (!dir.exists(cmat_dir_macro_mm)) dir.create(cmat_dir_macro_mm)
 
 
 
-### !!!NOTE!!!: These are paths from the TRsc paper
+### !!!NOTE!!!: These paths are from external projects
+
+
+## --- From the TRsc paper
 
 # TRsc metadata
 sc_meta_path <- "/space/grp/amorin/Metadata/single_cell_dataset_meta.tsv"
@@ -64,6 +67,16 @@ tfs_mm_path <-  "/space/grp/amorin/Metadata/AnimalTFDB_mouse_V4.tsv"
 pc_ortho_path <- "/space/grp/amorin/Metadata/hg_mm_1to1_ortho_genes_DIOPT_V9.tsv"
 
 
+## --- From Unibind analysis
+
+# Unibind ChIP-seq experiments as GR objects
+bind_gr_path_hg <- "/space/scratch/amorin/R_objects/unibind_grlist_perm_human.RDS"
+bind_gr_path_mm <- "/space/scratch/amorin/R_objects/unibind_grlist_perm_mouse.RDS"
+
+# Scored bind matrices and isolated metadata
+bind_dat_path <- "/space/scratch/amorin/R_objects/processed_unibind_data.RDS"
+bind_meta_path <- "/space/scratch/amorin/R_objects/Unibind_metadata.RDS"
+
 
 ## ---
 
@@ -83,8 +96,8 @@ astro_meta_dedup_path <- "/space/scratch/amorin/aggregate_microglia/astrocyte_me
 # Microglia list of count matrices and meta
 mcg_dat_path <- file.path(data_out_dir, "microglia_dat_list.RDS")
 macro_dat_path <- file.path(data_out_dir, "macrophage_dat_list.RDS")
-neuron_dat_path <- "/space/scratch/amorin/aggregate_microglia/neuron_dat_list.RDS"
-astro_dat_path <- "/space/scratch/amorin/aggregate_microglia/astrocyte_dat_list.RDS"
+neuron_dat_path <- file.path(data_out_dir, "neuron_dat_list.RDS")
+astro_dat_path <- file.path(data_out_dir, "astrocyte_dat_list.RDS")
 
 
 # Cell correlations per dataset
@@ -99,13 +112,34 @@ macro_count_summ_list_path <- file.path(data_out_dir, "macrophage_gene_count_sum
 
 
 # Lists of aggregate coexpression and NA tracking matrices
+# Microglia
 mcg_fz_hg_path <- file.path(cmat_dir_mcg_hg, "aggregate_cormat_FZ_microglia_hg.RDS")
 mcg_allrank_hg_path <- file.path(cmat_dir_mcg_hg, "aggregate_cormat_allrank_microglia_hg.RDS")
 mcg_colrank_hg_path <- file.path(cmat_dir_mcg_hg, "aggregate_cormat_colrank_microglia_hg.RDS")
 mcg_fz_mm_path <- file.path(cmat_dir_mcg_mm, "aggregate_cormat_FZ_microglia_mm.RDS")
 mcg_allrank_mm_path <- file.path(cmat_dir_mcg_mm, "aggregate_cormat_allrank_microglia_mm.RDS")
 mcg_colrank_mm_path <- file.path(cmat_dir_mcg_mm, "aggregate_cormat_colrank_microglia_mm.RDS")
+mcg_allrank_filt_hg_path <- file.path(cmat_dir_mcg_hg, "aggregate_cormat_allrank_filter_microglia_hg.RDS")
+mcg_allrank_filt_mm_path <- file.path(cmat_dir_mcg_mm, "aggregate_cormat_allrank_filter_microglia_mm.RDS")
+mcg_allrank_scor_mm_path <- file.path(cmat_dir_mcg_mm, "aggregate_cormat_allrank_scor_microglia_mm.RDS")
+mcg_fz_scor_mm_path <- file.path(cmat_dir_mcg_mm, "aggregate_cormat_FZ_scor_microglia_mm.RDS")
+# Macrophage
+macro_fz_hg_path <- file.path(cmat_dir_macro_hg, "aggregate_cormat_FZ_macrophage_hg.RDS")
+macro_allrank_hg_path <- file.path(cmat_dir_macro_hg, "aggregate_cormat_allrank_macrophage_hg.RDS")
+macro_fz_mm_path <- file.path(cmat_dir_macro_mm, "aggregate_cormat_FZ_macrophage_mm.RDS")
+macro_allrank_mm_path <- file.path(cmat_dir_macro_mm, "aggregate_cormat_allrank_macrophage_mm.RDS")
 
+
+# CSCORE aggregate output
+cscore_hg_path <- file.path(data_out_dir, "CSCORE_aggregate_microglia_hg.RDS")
+cscore_mm_path <- file.path(data_out_dir, "CSCORE_aggregate_microglia_mm.RDS")
+
+
+# GRNBoost2 aggregate output
+grn_avg_hg_path <- file.path(data_out_dir, "GRNBoost2_average_mat_hg.RDS")
+grn_avg_mm_path <- file.path(data_out_dir, "GRNBoost2_average_mat_mm.RDS")
+grn_allrank_hg_path <- file.path(data_out_dir, "GRNBoost2_allrank_mat_hg.RDS")
+grn_allrank_mm_path <- file.path(data_out_dir, "GRNBoost2_allrank_mat_mm.RDS")
 
 
 # Microglia cCREs with region to gene predictions
