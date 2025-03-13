@@ -6,6 +6,7 @@ options(repos = "http://cran.rstudio.com/")
 
 
 packages <- c(
+  "devtools",
   "testthat",
   "parallel",
   "tidyverse",
@@ -22,7 +23,9 @@ packages <- c(
   "qlcMatrix",
   "microbenchmark",
   "credentials",
-  "rJava"
+  "rJava",
+  "viridis",
+  "cluster"
 )
 
 
@@ -34,12 +37,11 @@ if (any(installed_packages == FALSE)) {
 }
 
 
-
 BiocManager::install("preprocessCore")
-# BiocManager::install("WGCNA")
-# BiocManager::install("limma")
-# BiocManager::install("edgeR")
-# BiocManager::install("ComplexHeatmap")
+BiocManager::install("limma")
+BiocManager::install("ComplexHeatmap")
+BiocManager::install("GenomicRanges")
 
-devtools::install_github('PavlidisLab/ermineR')
+
 devtools::install_github("PavlidisLab/aggtools")
+devtools::install_github("ChangSuBiostats/CS-CORE")
