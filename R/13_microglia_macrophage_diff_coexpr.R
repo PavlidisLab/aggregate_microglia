@@ -40,6 +40,9 @@ macro_cmat_paths <- list.files(cmat_dir_macro_mm, pattern = "_cormat.tsv", full.
 # Path for list of coexpr mats together (faster to load than individual)
 mcg_macro_tf_cmat_l_path <- file.path(data_out_dir, "mcg_macro_cmat_l.RDS")
 
+# Path of TF list of diff coexpr model controlling for expression
+tf_fit_l_path <- file.path(data_out_dir, "mcg_macro_diffcoexpr_tf_lmfit.RDS")
+
 # Considering only genes that met measurement filter in micro and macro
 keep_genes <- intersect(mcg_summ$Mouse$Filter_genes, macro_summ$Mouse$Filter_genes)
 keep_tfs <- intersect(keep_genes, tfs_mm$Symbol)
@@ -49,8 +52,14 @@ mcg_mat <- mcg_agg$Agg_mat[keep_genes, keep_genes]
 macro_mat <- macro_agg$Agg_mat[keep_genes, keep_genes]
 
 
-# This is the TF that will be inspected
+# This is the TF that will be inspected across diff coexpr approaches
 check_tf <- "Maf"
+
+# This gene gets plotted for its relationship with check_tf.
+# Maf - Timp2 selected because this was ostensibly a case of diff coexpression
+# that was not explained by differential expression
+check_gene <- "Timp2"
+
 
 
 # Functions
@@ -222,6 +231,98 @@ prepare_gene_df <- function(tf, gene, mcg_l, macro_l, expr_mat) {
 }
 
 
+# For the given TF, loop over all genes, generating a dataframe of the TF-gene
+# FZs across datasets as their expression levels, then use lm() to fit the 
+# FZs as a function of cell type status and expression levels
+
+fit_model_w_expr <- function(tf, genes, mcg_l, macro_l, expr_mat, ncores) {
+  
+  fit_expr_l <- mclapply(genes, function(gene) {
+    
+    if (gene == tf) return(NA) # Ignore self cor
+    
+    # data frame of FZ and expression values across datasets for TR and gene
+    gene_df <- prepare_gene_df(tf, gene, mcg_l, macro_l, expr_mat)
+    
+    # summarize model fit
+    fit <- lm(FZ ~ CT + Expr_absdiff + Expr_sum, data = gene_df)
+    summ <- summary(fit)
+    
+    # Extracting coefficients and pvals of cell type and expression covariates
+    data.frame(
+      TF = tf,
+      Gene = gene,
+      CT_est = summ$coefficients["CTMicroglia", "Estimate"],
+      CT_pval = summ$coefficients["CTMicroglia", "Pr(>|t|)"],
+      Expr_absdiff_est = summ$coefficients["Expr_absdiff", "Estimate"],
+      Expr_absdiff_pval = summ$coefficients["Expr_absdiff", "Pr(>|t|)"],
+      Expr_sum_est = summ$coefficients["Expr_sum", "Estimate"],
+      Expr_sum_pval = summ$coefficients["Expr_sum", "Pr(>|t|)"]
+    )
+    
+  }, mc.cores = ncore)
+  
+  # Bind all gene fits into one df and adjust pvals
+  fit_expr_df <- do.call(rbind, fit_expr_l) %>%
+    mutate(CT_adj_pval = p.adjust(CT_pval, method = "BH"),
+           Expr_absdiff_adj_pval = p.adjust(Expr_absdiff_pval, method = "BH"),
+           Expr_sum_adj_pval = p.adjust(Expr_sum_pval, method = "BH"))
+  
+  return(fit_expr_df)
+}
+
+
+
+# This is the same approach but does not control for expression levels. This
+# was used to ensure that it was giving equivalent answers to the limma model 
+# with no expression covariates
+
+fit_model_wo_expr <- function(tf, genes, mcg_l, macro_l, expr_mat, ncores) {
+  
+  fit_noexpr_l <- mclapply(genes, function(gene) {
+    
+    if (gene == tf) return(NA) # Ignore self cor
+    
+    # data frame of FZ and expression values across datasets for TR and gene
+    gene_df <- prepare_gene_df(tf, gene, mcg_l, macro_l, expr_mat)
+    
+    # summarize model fit
+    fit <- lm(FZ ~ CT, data = gene_df)
+    summ <- summary(fit)
+    
+    # Extracting coefficients and pvals of cell type
+    data.frame(
+      TF = check_tf,
+      Gene = gene,
+      CT_est = summ$coefficients["CTMicroglia", "Estimate"],
+      CT_pval = summ$coefficients["CTMicroglia", "Pr(>|t|)"]
+    )
+    
+  }, mc.cores = ncore)
+  
+  # Bind all gene fits into one df and adjust pvals
+  fit_noexpr_df <- do.call(rbind, fit_noexpr_l) %>% 
+    mutate(CT_adj_pval = p.adjust(CT_pval, method = "BH"))
+  
+  return(fit_noexpr_df)
+}
+
+
+
+# Fit differential coexpression model controlling for expression over all TFs.
+# This is very slow, would be good to figure out how to include gene-level 
+# covariates into limma...
+
+fit_model_w_expr <- function(tfs, genes, mcg_l, macro_l, expr_mat, ncores) {
+  
+  
+  fit_l <- mclapply(tfs, function(tf) {
+    fit_model_w_expr(tf, genes, mcg_l, macro_l, expr_mat, ncores = 1)
+  }, mc.cores = ncores)
+  names(fit_l) <- tfs
+  
+  return(fit_l)
+}
 
 
 # Load individual FZ mats for microglia and macrophage into a list
@@ -287,9 +388,9 @@ diffrank_df <- summarize_diffrank(diffrank_df, keep_genes, null_diffrank)
 res_l <- fit_all_model(mcg_l, macro_l, keep_tfs, ncore)
 
 
-# Count of genes differentially coexpressed
-n_sig <- sapply(res_l, function(x) sum(x$adj.P.Val < 0.05, na.rm = TRUE))
-prop_sig <- sum(n_sig > 0) / length(n_sig)
+# Count of genes differentially coexpressed w/o controlling for expression
+n_sig_wo_expr <- sapply(res_l, function(x) sum(x$adj.P.Val < 0.05, na.rm = TRUE))
+prop_sig_wo_expr <- sum(n_sig_wo_expr > 0) / length(n_sig_wo_expr)
 
 
 
@@ -328,13 +429,13 @@ expr_res <- topTable(expr_fit,
 
 
 # TFs that have at least 1 sig diff coexpr. gene (not controlling for expression)
-diff_tfs <- names(which(n_sig > 0))
+diff_tfs_wo_expr <- names(which(n_sig_wo_expr > 0))
 
 
 # Iterate through diff coexpr pairs, checking whether the TF itself is DE and 
 # counting how many of its diff coexpr. genes are also DE
 
-diff_l <- lapply(diff_tfs, function(tf) {
+diff_df_wo_expr <- lapply(diff_tfs_wo_expr, function(tf) {
   
   tf_de <- filter(expr_res, Symbol == tf)
   genes_dc <- filter(res_l[[tf]], adj.P.Val < 0.05)$Symbol
@@ -345,18 +446,17 @@ diff_l <- lapply(diff_tfs, function(tf) {
     TF = tf,
     TF_FC = tf_de$logFC,
     TF_FDR = tf_de$adj.P.Val,
-    TF_n_DC = n_sig[tf],
+    TF_n_DC = n_sig_wo_expr[tf],
     n_DC_and_DE = n_dc_and_de
   )
   
-})
+}) %>% 
+  bind_rows()
 
-
-diff_df <- do.call(rbind, diff_l)
 
 
 # Count of TFs that were themselves DE
-n_tf_de <- sum(diff_df$TF_FDR < 0.05)
+n_tf_de <- sum(diff_df_wo_expr$TF_FDR < 0.05)
 
 
 # Looking for genes that are diff coexpressed but not diff. expressed for check tf
@@ -374,67 +474,11 @@ dc_not_de <- res_l[[check_tf]] %>%
 # -----------------------------------------------------------------------------
 
 
+# Fit over all gene pairs with check tf, controlling for joint expression
+fit_expr_df <- fit_model_w_expr(check_tf, keep_genes, mcg_l, macro_l, expr_mat, ncores)
 
-
-fit_expr_l <- mclapply(keep_genes, function(gene) {
-
-  if (gene == check_tf) return(NA)
-
-  gene_df <- prepare_gene_df(check_tf, gene, mcg_l, macro_l, expr_mat)
-
-  fit <- lm(FZ ~ CT + Expr_absdiff + Expr_sum, data = gene_df)
-
-  summ <- summary(fit)
-
-  data.frame(
-    TF = check_tf,
-    Gene = gene,
-    CT_est = summ$coefficients["CTMicroglia", "Estimate"],
-    CT_pval = summ$coefficients["CTMicroglia", "Pr(>|t|)"],
-    Expr_absdiff_est = summ$coefficients["Expr_absdiff", "Estimate"],
-    Expr_absdiff_pval = summ$coefficients["Expr_absdiff", "Pr(>|t|)"],
-    Expr_sum_est = summ$coefficients["Expr_sum", "Estimate"],
-    Expr_sum_pval = summ$coefficients["Expr_sum", "Pr(>|t|)"]
-  )
-
-}, mc.cores = ncore)
-
-
-
-
-
-fit_noexpr_l <- mclapply(keep_genes, function(gene) {
-  
-  if (gene == check_tf) return(NA)
-  
-  gene_df <- prepare_gene_df(check_tf, gene, mcg_l, macro_l, expr_mat)
-  
-  fit <- lm(FZ ~ CT, data = gene_df)
-  
-  summ <- summary(fit)
-  
-  data.frame(
-    TF = check_tf,
-    Gene = gene,
-    CT_est = summ$coefficients["CTMicroglia", "Estimate"],
-    CT_pval = summ$coefficients["CTMicroglia", "Pr(>|t|)"]
-  )
-  
-}, mc.cores = ncore)
-
-
-
-
-fit_expr_df <- do.call(rbind, fit_expr_l) %>%
-   mutate(CT_adj_pval = p.adjust(CT_pval, method = "BH"),
-          Expr_absdiff_adj_pval = p.adjust(Expr_absdiff_pval, method = "BH"),
-          Expr_sum_adj_pval = p.adjust(Expr_sum_pval, method = "BH"))
-
-
-
-fit_noexpr_df <- do.call(rbind, fit_noexpr_l) %>% 
-  mutate(CT_adj_pval = p.adjust(CT_pval, method = "BH"))
-
+# Fit over all gene pairs with check tf, without controlling for joint expression
+fit_noexpr_df <- fit_model_wo_expr(check_tf, keep_genes, mcg_l, macro_l, expr_mat, ncores)
 
 
 # Checking that limma -expr and lm -expr models are equivalent
@@ -443,119 +487,58 @@ fit_noexpr_df <- do.call(rbind, fit_noexpr_l) %>%
 # plot(check_noexpr$CT_pval, check_noexpr$P.Value, xlab = "lm w/o expr", ylab = "limma w/o expr", cex.lab = 1.6)
 
 
+# Here I am joining the differential rank, differential expression, and diff
+# coexpr models (no expr is using the lm, not limma fit) for check TF.
 
 compare_df <- 
   left_join(fit_expr_df, fit_noexpr_df, by = "Gene", suffix = c("_w_expr", "_wo_expr")) %>% 
   left_join(expr_res, by = c("Gene" = "Symbol")) %>% 
-  left_join(summ_null_diffrank, by = c("Gene" = "Symbol")) %>% 
+  left_join(diffrank_df, by = c("Gene" = "Symbol")) %>% 
   dplyr::select(-c(TF_w_expr, TF_wo_expr))
 
 
 
-cor(select_if(compare_df, is.numeric), use = "pairwise.complete.obs")
+cor_compre_df <- cor(select_if(compare_df, is.numeric), use = "pairwise.complete.obs")
 
 
-plot(compare_df$CT_est_w_expr, compare_df$CT_est_wo_expr, xlab = "lm w/ expr", ylab = "lm w/o expr", cex.lab = 1.6)
+# Fit diff coexpr model controlling for expression over all TFs (slow!!)
 
-
-ggplot(compare_df, aes(x = -log10(CT_adj_pval_w_expr), y = -log10(CT_adj_pval_wo_expr))) +
-  geom_point(shape = 21, size = 2.4, alpha = 0.7) +
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed", colour = "firebrick") +
-  geom_vline(xintercept = -log10(0.05), linetype = "dashed", colour = "firebrick") +
-  ylab("-log10 adj. pval for lm (-expr)") +
-  xlab("-log10 adj. pval for lm (+expr)") +
-  ggtitle(check_tf) +
-  theme_classic() +
-  theme(text = element_text(size = 20))
-
-
-ggplot(compare_df, aes(x = logFC, y = Z_diff)) +
-  geom_point(shape = 21, size = 2.4, fill = "slategrey", colour = "slategrey", alpha = 0.8) +
-  geom_hline(yintercept = -2, linetype = "dashed", colour = "firebrick") +
-  geom_hline(yintercept = 2, linetype = "dashed", colour = "firebrick") +
-  geom_vline(xintercept = -2, linetype = "dashed", colour = "firebrick") +
-  geom_vline(xintercept = 2, linetype = "dashed", colour = "firebrick") +
-  ylab("Differential coexpression Z-score") +
-  xlab("Differential expression logFC") +
-  ggtitle(check_tf) +
-  theme_classic() +
-  theme(text = element_text(size = 25))
-
-
-
-plot(compare_df$Expr_absdiff_est, compare_df$logFC)
-plot(compare_df$Expr_sum_est, compare_df$logFC)
-
-
-
-# Model over all TFs
-
-
-fit_diffcoexpr_all_tfs <- function(genes, tfs, mcg_l, macro_l, expr_mat, ncore) {
+if (!file.exists(tf_fit_l_path)) {
   
-  tf_l <- mclapply(tfs, function(tf) {
-    
-    fit_l <- lapply(keep_genes, function(gene) {
-      
-      if (gene == tf) return(NA)
-      
-      gene_df <- prepare_gene_df(tf, gene, mcg_l, macro_l, expr_mat)
-      
-      fit <- lm(FZ ~ CT + Expr_absdiff + Expr_sum, data = gene_df)
-      
-      summ <- summary(fit)
-      
-      data.frame(
-        TF = tf,
-        Gene = gene,
-        CT_est = summ$coefficients["CTMicroglia", "Estimate"],
-        CT_pval = summ$coefficients["CTMicroglia", "Pr(>|t|)"],
-        Expr_absdiff_est = summ$coefficients["Expr_absdiff", "Estimate"],
-        Expr_absdiff_pval = summ$coefficients["Expr_absdiff", "Pr(>|t|)"],
-        Expr_sum_est = summ$coefficients["Expr_sum", "Estimate"],
-        Expr_sum_pval = summ$coefficients["Expr_sum", "Pr(>|t|)"]
-      )
-      
-    })
-    
-    fit_df <- do.call(rbind, fit_l) %>% 
-      mutate(CT_adj_pval = p.adjust(CT_pval, method = "BH"),
-             Expr_absdiff_adj_pval = p.adjust(Expr_absdiff_pval, method = "BH"),
-             Expr_sum_adj_pval = p.adjust(Expr_sum_pval, method = "BH"))
-    
-  }, mc.cores = ncore)
+  fit_model_w_expr(tfs = keep_tfs, 
+                   genes = keep_genes, 
+                   mcg_l = mcg_l, 
+                   macro_l = macro_l, 
+                   expr_mat = expr_mat, 
+                   ncores = ncore)
   
-  names(tf_l) <- tfs
+  saveRDS(tf_fit_l, tf_fit_l_path)
   
-  return(tf_l)
+} else {
+  
+  tf_fit_l <- readRDS(tf_fit_l_path)
+
 }
 
 
-tf_fit_l <- fit_diffcoexpr_all_tfs(genes = keep_genes, 
-                                   tfs = keep_tfs, 
-                                   mcg_l = mcg_l,
-                                   macro_l = macro_l, 
-                                   expr_mat = expr_mat,
-                                   ncore = 20)
+
+# Count of sig genes across all TFs after controlling for expression
+
+n_sig_w_expr <- unlist(
+  lapply(tf_fit_l, function(x) sum(x$CT_adj_pval < 0.05, na.rm = TRUE))
+)
+
+
+prop_sig_w_expr <- sum(n_sig_w_expr > 0) / length(n_sig_w_expr)
 
 
 
-saveRDS(tf_fit_l, "/space/scratch/amorin/aggregate_microglia/mcg_macro_diffcoexpr_tf_lmfit.RDS")
-stop()
+# Same as before, iterate through TFs that have sig diff coexpr genes (this time
+# after controlling for expression), and tally DE/diff coexpr status
+diff_tfs_w_expr <- names(which(n_sig_w_expr > 0))
 
 
-n_sig2 <- sapply(tf_fit_l, function(x) sum(x$CT_adj_pval < 0.05, na.rm = TRUE))
-sum(n_sig2 > 0) / length(n_sig2)
-summary(n_sig2)
-hist(n_sig2, breaks = 100)
-
-plot(n_sig, n_sig2)
-
-
-diff_tfs2 <- names(which(n_sig2 > 0))
-
-
-diff_l2 <- lapply(diff_tfs2, function(tf) {
+diff_df_w_expr <- lapply(diff_tfs_w_expr, function(tf) {
   
   tf_de <- filter(expr_res, Symbol == tf)
   genes_dc <- filter(tf_fit_l[[tf]], CT_adj_pval < 0.05)$Gene
@@ -566,51 +549,12 @@ diff_l2 <- lapply(diff_tfs2, function(tf) {
     TF = tf,
     TF_FC = tf_de$logFC,
     TF_FDR = tf_de$adj.P.Val,
-    TF_n_DC = n_sig2[tf],
+    TF_n_DC = n_sig_w_expr[tf],
     n_DC_and_DE = n_dc_and_de
   )
   
-})
-
-
-diff_df2 <- do.call(rbind, diff_l2)
-
-
-n_tf_de2 <- sum(diff_df2$TF_FDR < 0.05)
-
-
-# Attempting to visualize FZ ~ Cell_type on residuals
-tf <- "Mef2c"
-gene <- "Dab2"
-tf_mat <- prepare_tf_mat2(tf, mcg_l, macro_l)
-tf_df <- ready_tf_df(tf, keep_genes, tf_mat, mcg_summ, macro_summ)
-tf_df <- filter(tf_df, Gene == gene)
-
-
-boxplot(tf_df$Expr_diff ~ tf_df$Cell_type)
-boxplot(tf_df$Expr_absdiff ~ tf_df$Cell_type)
-boxplot(tf_df$Expr_add ~ tf_df$Cell_type)
-boxplot(tf_df$FZ ~ tf_df$Cell_type)
-
-
-check_expr$Diff <- check_expr$TF - check_expr$Gene
-check_expr$Abs_diff <- abs(check_expr$Diff)
-check_expr$Add <- check_expr$TF + check_expr$Gene
-
-boxplot(check_expr$Diff ~ check_expr$CT)
-boxplot(check_expr$Abs_diff ~ check_expr$CT)
-boxplot(check_expr$Add ~ check_expr$CT)
-
-
-
-fit <- lm(FZ ~ Cell_type + Expr_absdiff + Expr_add, data = tf_df)
-
-residuals_expr_corrected <- resid(fit) + coef(fit)["(Intercept)"] + (coef(fit)["Cell_typeMicroglia"] * as.numeric(tf_df$Cell_type == "Microglia"))
-
-tf_df$FZ_corrected <- residuals_expr_corrected
-
-boxplot(FZ ~ Cell_type, data = tf_df)
-boxplot(FZ_corrected ~ Cell_type, data = tf_df)
+}) %>% 
+  bind_rows()
 
 
 
@@ -664,7 +608,6 @@ p4b <- ggplot(res_l[[check_tf]], aes(x = logFC, y = -log10(adj.P.Val))) +
 
 # Inspecting coexpr and expression values for an individual TF-gene pair
 
-check_gene <- "Timp2"
 check_df <- prepare_gene_df(check_tf, check_gene, mcg_l, macro_l, expr_mat)
 
 tf_pval <- filter(expr_res, Symbol == check_tf)$adj.P.Val
@@ -705,3 +648,16 @@ p5c <- ggplot(check_df, aes(x = CT, y = Expr_gene)) +
 
 
 p5 <- egg::ggarrange(p5a, p5b, p5c, nrow = 1)
+
+
+# Scatter of check tf-gene significance for fit with and without controlling for expression
+
+p6 <- ggplot(compare_df, aes(x = -log10(CT_adj_pval_w_expr), y = -log10(CT_adj_pval_wo_expr))) +
+  geom_point(shape = 21, size = 2.4, alpha = 0.7) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", colour = "firebrick") +
+  geom_vline(xintercept = -log10(0.05), linetype = "dashed", colour = "firebrick") +
+  ylab("-log10 adj. pval for lm (-expr)") +
+  xlab("-log10 adj. pval for lm (+expr)") +
+  ggtitle(check_tf) +
+  theme_classic() +
+  theme(text = element_text(size = 20))
