@@ -108,7 +108,11 @@ prepare_tf_mat <- function(tf, mcg_l, macro_l) {
 
 # Null rank differences by permuting datasets
 
-generate_null_diffrank <- function(check_tf, mcg_l, macro_l, iters = 1000) {
+generate_null_diffrank <- function(check_tf,
+                                   mcg_l, 
+                                   macro_l, 
+                                   iters = 1000, 
+                                   ncores = 1) {
   
   # Ready TF matrix and get the indices of micro/macro profiles
   tf_mat <- prepare_tf_mat(check_tf, mcg_l, macro_l)
@@ -130,7 +134,7 @@ generate_null_diffrank <- function(check_tf, mcg_l, macro_l, iters = 1000) {
     
     diff <- rank_group1 - rank_group2
     
-  }, mc.cores = ncore)
+  }, mc.cores = ncores)
   
   
   null_diffrank <- do.call(cbind, null_diffrank)
@@ -209,7 +213,6 @@ fit_all_model <- function(mcg_l, macro_l, tfs, ncore = 1) {
 # diff coexpr while controlling for expression
 
 prepare_gene_df <- function(tf, gene, mcg_l, macro_l, expr_mat) {
-  
   
   fz <- prepare_tf_mat(tf, mcg_l, macro_l)[gene, ]
   cts <- str_extract(names(fz), "Microglia|Macrophage")
@@ -314,7 +317,6 @@ fit_model_wo_expr <- function(tf, genes, mcg_l, macro_l, expr_mat, ncores) {
 # covariates into limma...
 
 fit_model_w_expr <- function(tfs, genes, mcg_l, macro_l, expr_mat, ncores) {
-  
   
   fit_l <- mclapply(tfs, function(tf) {
     fit_model_w_expr(tf, genes, mcg_l, macro_l, expr_mat, ncores = 1)
@@ -424,7 +426,6 @@ expr_res <- topTable(expr_fit,
 
 
 
-
 # Are there any significant TF-gene pairs that don't have sig expr changes?
 
 
@@ -498,7 +499,7 @@ compare_df <-
 
 
 
-cor_compre_df <- cor(select_if(compare_df, is.numeric), use = "pairwise.complete.obs")
+cor_compare_df <- cor(select_if(compare_df, is.numeric), use = "pairwise.complete.obs")
 
 
 # Fit diff coexpr model controlling for expression over all TFs (slow!!)
