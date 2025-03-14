@@ -70,12 +70,12 @@ pc_ortho_path <- "/space/grp/amorin/Metadata/hg_mm_1to1_ortho_genes_DIOPT_V9.tsv
 ## --- From Unibind analysis
 
 # Unibind ChIP-seq experiments as GR objects
-bind_gr_path_hg <- "/space/scratch/amorin/R_objects/unibind_grlist_perm_human.RDS"
-bind_gr_path_mm <- "/space/scratch/amorin/R_objects/unibind_grlist_perm_mouse.RDS"
+bind_gr_path_hg <- "/space/scratch/amorin/Unibind/unibind_grlist_perm_human.RDS"
+bind_gr_path_mm <- "/space/scratch/amorin/Unibind/unibind_grlist_perm_mouse.RDS"
 
 # Scored bind matrices and isolated metadata
-bind_dat_path <- "/space/scratch/amorin/R_objects/processed_unibind_data.RDS"
-bind_meta_path <- "/space/scratch/amorin/R_objects/Unibind_metadata.RDS"
+bind_dat_path <- "/space/scratch/amorin/Unibind/processed_unibind_data.RDS"
+bind_meta_path <- "/space/scratch/amorin/Unibind/unibind_metadata.RDS"
 
 
 ## ---
